@@ -1,0 +1,89 @@
+import { Home, Briefcase, MapPin, Settings, History, Users, BarChart3, Wallet } from 'lucide-react'
+import { Link, useLocation } from 'react-router-dom'
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarHeader,
+  SidebarFooter,
+} from '@/components/ui/sidebar'
+import { useAuthStore } from '@/stores/useAuthStore'
+import { Button } from '@/components/ui/button'
+
+export function AppSidebar() {
+  const { role, logout, user } = useAuthStore()
+  const location = useLocation()
+
+  const getMenu = () => {
+    switch (role) {
+      case 'pro':
+        return [
+          { title: 'Painel', url: '/pro', icon: Home },
+          { title: 'Ganhos', url: '/pro/earnings', icon: Wallet },
+          { title: 'Configurações', url: '#', icon: Settings },
+        ]
+      case 'client':
+        return [
+          { title: 'Painel', url: '/client', icon: Home },
+          { title: 'Nova Solicitação', url: '/client/request', icon: Briefcase },
+          { title: 'Histórico', url: '/client/history', icon: History },
+          { title: 'Locais', url: '#', icon: MapPin },
+        ]
+      case 'admin':
+        return [
+          { title: 'Visão Geral', url: '/admin', icon: BarChart3 },
+          { title: 'Usuários', url: '#', icon: Users },
+          { title: 'Preços Dinâmicos', url: '#', icon: Wallet },
+        ]
+      default:
+        return []
+    }
+  }
+
+  const items = getMenu()
+
+  return (
+    <Sidebar>
+      <SidebarHeader className="p-4 flex flex-row items-center gap-2 border-b">
+        <div className="bg-primary text-white p-1.5 rounded-lg">
+          <Briefcase className="h-5 w-5" />
+        </div>
+        <span className="font-bold text-lg tracking-tight text-primary">ProFreela</span>
+      </SidebarHeader>
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {items.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild isActive={location.pathname === item.url}>
+                    <Link to={item.url}>
+                      <item.icon />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+      <SidebarFooter className="p-4 border-t">
+        <div className="flex items-center gap-3 mb-4">
+          <img src={user?.avatar} alt="Avatar" className="w-10 h-10 rounded-full border bg-muted" />
+          <div className="flex flex-col">
+            <span className="text-sm font-semibold">{user?.name}</span>
+            <span className="text-xs text-muted-foreground capitalize">{role}</span>
+          </div>
+        </div>
+        <Button variant="outline" className="w-full" onClick={logout}>
+          Sair
+        </Button>
+      </SidebarFooter>
+    </Sidebar>
+  )
+}
