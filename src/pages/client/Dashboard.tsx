@@ -1,23 +1,41 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { PlusCircle, Clock, Shield } from 'lucide-react'
+import { PlusCircle, Clock, Shield, MapPin, CreditCard, QrCode } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from '@/components/ui/dialog'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { Label } from '@/components/ui/label'
 import { useAuth } from '@/hooks/use-auth'
-import { getClientJobs, getBanners } from '@/services/api'
+import { getClientJobs, getBanners, getNearbyPros, updateJob } from '@/services/api'
 import { useRealtime } from '@/hooks/use-realtime'
+import { useToast } from '@/hooks/use-toast'
 
 export default function ClientDashboard() {
   const { user } = useAuth()
+  const { toast } = useToast()
   const [jobs, setJobs] = useState<any[]>([])
   const [banners, setBanners] = useState<any[]>([])
+  const [pros, setPros] = useState<any[]>([])
+
+  const [paymentJob, setPaymentJob] = useState<any>(null)
+  const [paymentMethod, setPaymentMethod] = useState('credit_card')
+  const [processingPayment, setProcessingPayment] = useState(false)
 
   const loadData = async () => {
     if (!user) return
-    const [j, b] = await Promise.all([getClientJobs(user.id), getBanners()])
+    const [j, b, p] = await Promise.all([getClientJobs(user.id), getBanners(), getNearbyPros()])
     setJobs(j)
     setBanners(b)
+    setPros(p)
   }
 
   useEffect(() => {
@@ -26,6 +44,23 @@ export default function ClientDashboard() {
   useRealtime('jobs', loadData)
 
   const activeJobs = jobs.filter((j) => ['pending', 'accepted', 'in_progress'].includes(j.status))
+
+  const handlePayment = async () => {
+    if (!paymentJob) return
+    setProcessingPayment(true)
+    try {
+      // Simulate payment processing
+      await new Promise((r) => setTimeout(r, 1500))
+      await updateJob(paymentJob.id, { status: 'in_progress' })
+      toast({ title: 'Pagamento Aprovado!', description: 'O serviço foi pago com sucesso.' })
+      setPaymentJob(null)
+      loadData()
+    } catch (err) {
+      toast({ title: 'Erro no pagamento', variant: 'destructive' })
+    } finally {
+      setProcessingPayment(false)
+    }
+  }
 
   return (
     <div className="space-y-8 max-w-5xl mx-auto w-full">
@@ -48,7 +83,7 @@ export default function ClientDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-primary mb-1">Profissionais Ativos</p>
-                <h3 className="text-3xl font-bold text-primary">2</h3>
+                <h3 className="text-3xl font-bold text-primary">{pros.length}</h3>
               </div>
               <div className="bg-white p-3 rounded-full shadow-sm">
                 <Shield className="h-6 w-6 text-primary" />
@@ -63,7 +98,9 @@ export default function ClientDashboard() {
                 <p className="text-sm font-medium text-muted-foreground mb-1">
                   Agendamentos Futuros
                 </p>
-                <h3 className="text-3xl font-bold">5</h3>
+                <h3 className="text-3xl font-bold">
+                  {jobs.filter((j) => j.status === 'pending').length}
+                </h3>
               </div>
               <div className="bg-muted p-3 rounded-full">
                 <Clock className="h-6 w-6 text-muted-foreground" />
@@ -73,26 +110,44 @@ export default function ClientDashboard() {
         </Card>
       </div>
 
-      {/* Banners */}
-      {banners.length > 0 && (
-        <div className="mb-6">
-          {banners.map((b) => (
-            <a
-              key={b.id}
-              href={b.link}
-              target="_blank"
-              rel="noreferrer"
-              className="block overflow-hidden rounded-xl"
-            >
-              <img
-                src={b.image_url}
-                alt="Banner"
-                className="w-full h-32 object-cover transition-transform hover:scale-105"
-              />
-            </a>
-          ))}
-        </div>
-      )}
+      {/* Map of Nearby Pros */}
+      <Card className="overflow-hidden">
+        <CardHeader className="bg-slate-50 pb-4 border-b">
+          <CardTitle className="text-lg flex items-center gap-2">
+            <MapPin className="h-5 w-5 text-primary" /> Profissionais Próximos (Google Maps)
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="h-72 bg-slate-200 relative w-full">
+            <img
+              src="https://img.usecurling.com/p/1000/400?q=street%20map"
+              alt="Google Maps Mock"
+              className="w-full h-full object-cover opacity-60 mix-blend-multiply"
+            />
+            {pros.map((pro, i) => (
+              <div
+                key={pro.id}
+                className="absolute flex flex-col items-center transform -translate-x-1/2 -translate-y-full transition-all duration-1000"
+                style={{
+                  top: `${40 + i * 15}%`,
+                  left: `${30 + i * 20}%`,
+                }}
+              >
+                <div className="bg-primary text-white text-[10px] px-2 py-0.5 rounded-full mb-1 shadow-sm font-bold whitespace-nowrap">
+                  {pro.name?.split(' ')[0] || 'Pro'}
+                </div>
+                <div className="w-8 h-8 rounded-full border-2 border-primary overflow-hidden shadow-lg bg-white">
+                  <img
+                    src={pro.avatar || `https://img.usecurling.com/ppl/thumbnail?seed=${pro.id}`}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div className="w-2 h-2 bg-primary transform rotate-45 -mt-1 shadow-lg" />
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Active Requests */}
       <div>
@@ -140,9 +195,19 @@ export default function ClientDashboard() {
                           alt="Pro"
                         />
                         <span className="text-sm font-medium">{job.expand.pro_id.name}</span>
-                        <Button variant="link" size="sm" className="ml-auto h-auto py-0">
-                          Enviar Mensagem
-                        </Button>
+                        {job.status === 'accepted' ? (
+                          <Button
+                            size="sm"
+                            className="ml-auto bg-green-600 hover:bg-green-700 text-white"
+                            onClick={() => setPaymentJob(job)}
+                          >
+                            Pagar Serviço
+                          </Button>
+                        ) : (
+                          <Button variant="link" size="sm" className="ml-auto h-auto py-0">
+                            Enviar Mensagem
+                          </Button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -152,6 +217,60 @@ export default function ClientDashboard() {
           </div>
         )}
       </div>
+
+      {/* Payment Modal */}
+      <Dialog open={!!paymentJob} onOpenChange={(o) => !o && setPaymentJob(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Pagamento Seguro</DialogTitle>
+            <DialogDescription>
+              Conclua o pagamento (Stripe / Mercado Pago) para iniciar o serviço com o profissional.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="flex justify-between items-center bg-muted/50 p-4 rounded-xl">
+              <span className="font-medium text-muted-foreground">Valor Total</span>
+              <span className="text-2xl font-bold text-primary">
+                R$ {paymentJob?.price?.toFixed(2)}
+              </span>
+            </div>
+
+            <div className="space-y-3">
+              <Label>Método de Pagamento</Label>
+              <RadioGroup
+                value={paymentMethod}
+                onValueChange={setPaymentMethod}
+                className="grid grid-cols-2 gap-4"
+              >
+                <Label
+                  htmlFor="cc"
+                  className="flex flex-col items-center justify-center border-2 rounded-xl p-4 cursor-pointer hover:bg-muted/50 [&:has([data-state=checked])]:border-primary transition-all"
+                >
+                  <RadioGroupItem value="credit_card" id="cc" className="sr-only" />
+                  <CreditCard className="h-6 w-6 mb-2 text-primary" />
+                  <span className="text-sm font-medium">Cartão de Crédito</span>
+                </Label>
+                <Label
+                  htmlFor="pix"
+                  className="flex flex-col items-center justify-center border-2 rounded-xl p-4 cursor-pointer hover:bg-muted/50 [&:has([data-state=checked])]:border-primary transition-all"
+                >
+                  <RadioGroupItem value="pix" id="pix" className="sr-only" />
+                  <QrCode className="h-6 w-6 mb-2 text-primary" />
+                  <span className="text-sm font-medium">Pix</span>
+                </Label>
+              </RadioGroup>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPaymentJob(null)}>
+              Cancelar
+            </Button>
+            <Button onClick={handlePayment} disabled={processingPayment}>
+              {processingPayment ? 'Processando...' : 'Confirmar Pagamento'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

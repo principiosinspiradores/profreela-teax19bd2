@@ -28,7 +28,12 @@ function ProtectedRoute({
 }) {
   const { role, loading } = useAuth()
   if (loading) return <div>Loading...</div>
-  if (!allowedRoles.includes(role)) return <Navigate to="/" replace />
+  if (!allowedRoles.includes(role)) {
+    if (role === 'client') return <Navigate to="/client" replace />
+    if (role === 'pro') return <Navigate to="/pro" replace />
+    if (role === 'admin') return <Navigate to="/admin" replace />
+    return <Navigate to="/" replace />
+  }
   return children
 }
 

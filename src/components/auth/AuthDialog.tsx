@@ -13,7 +13,7 @@ import { Label } from '@/components/ui/label'
 import { useAuth, type Role } from '@/hooks/use-auth'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useToast } from '@/hooks/use-toast'
-import { getErrorMessage } from '@/lib/pocketbase/errors'
+import { getErrorMessage, extractFieldErrors, type FieldErrors } from '@/lib/pocketbase/errors'
 import { Briefcase } from 'lucide-react'
 
 interface AuthDialogProps {
@@ -29,6 +29,8 @@ export function AuthDialog({ open, onOpenChange, initialRole = 'client' }: AuthD
   const navigate = useNavigate()
   const { toast } = useToast()
 
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
+
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -40,6 +42,7 @@ export function AuthDialog({ open, onOpenChange, initialRole = 'client' }: AuthD
     e.preventDefault()
     setLoading(true)
 
+    setFieldErrors({})
     try {
       let result
       if (isLogin) {
@@ -65,6 +68,7 @@ export function AuthDialog({ open, onOpenChange, initialRole = 'client' }: AuthD
       }
 
       if (result.error) {
+        setFieldErrors(extractFieldErrors(result.error))
         toast({
           title: 'Erro na autenticação',
           description: getErrorMessage(result.error),
@@ -119,6 +123,7 @@ export function AuthDialog({ open, onOpenChange, initialRole = 'client' }: AuthD
               value={formData.email}
               onChange={(e) => setFormData((f) => ({ ...f, email: e.target.value }))}
             />
+            {fieldErrors.email && <p className="text-sm text-red-500">{fieldErrors.email}</p>}
           </div>
           <div className="space-y-2">
             <Label htmlFor="password">Senha</Label>
@@ -129,6 +134,7 @@ export function AuthDialog({ open, onOpenChange, initialRole = 'client' }: AuthD
               value={formData.password}
               onChange={(e) => setFormData((f) => ({ ...f, password: e.target.value }))}
             />
+            {fieldErrors.password && <p className="text-sm text-red-500">{fieldErrors.password}</p>}
           </div>
 
           {!isLogin && (

@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react'
-import { MapPin, Navigation, Clock } from 'lucide-react'
+import { MapPin, Navigation, Clock, AlertCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
+import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
 import {
   Dialog,
   DialogContent,
@@ -13,19 +16,26 @@ import {
 import { useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/use-auth'
-import { getProJobs, updateJob } from '@/services/api'
+import { getProJobs, updateJob, getUserDocuments, createDocument } from '@/services/api'
 import { useRealtime } from '@/hooks/use-realtime'
 import { useToast } from '@/hooks/use-toast'
 
 export default function ProDashboard() {
   const [isOnline, setIsOnline] = useState(false)
   const [pendingJob, setPendingJob] = useState<any>(null)
+  const [documents, setDocuments] = useState<any[]>([])
+  const [uploading, setUploading] = useState(false)
+
   const navigate = useNavigate()
   const { user } = useAuth()
   const { toast } = useToast()
 
-  const loadJobs = async () => {
-    if (!user || !isOnline) return
+  const loadData = async () => {
+    if (!user) return
+    const docs = await getUserDocuments(user.id)
+    setDocuments(docs)
+
+    if (!isOnline) return
     const jobs = await getProJobs(user.id)
     const pending = jobs.find((j) => j.status === 'pending')
     if (pending && pending.id !== pendingJob?.id) {
@@ -34,9 +44,30 @@ export default function ProDashboard() {
   }
 
   useEffect(() => {
-    loadJobs()
+    loadData()
   }, [user, isOnline])
-  useRealtime('jobs', loadJobs, isOnline)
+
+  useRealtime('jobs', loadData, isOnline)
+  useRealtime('documents', loadData)
+
+  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files?.length || !user) return
+    setUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('user_id', user.id)
+      formData.append('type', 'identity')
+      formData.append('status', 'pending')
+      formData.append('file', e.target.files[0])
+      await createDocument(formData)
+      toast({ title: 'Enviado', description: 'Documento em análise pela equipe.' })
+      loadData()
+    } catch (err) {
+      toast({ title: 'Erro', description: 'Falha ao enviar.', variant: 'destructive' })
+    } finally {
+      setUploading(false)
+    }
+  }
 
   const acceptJob = async () => {
     if (!pendingJob) return
@@ -53,13 +84,53 @@ export default function ProDashboard() {
     }
   }
 
+  if (user?.status === 'pending') {
+    return (
+      <div className="max-w-md mx-auto mt-10 space-y-6">
+        <Alert>
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Conta em Análise</AlertTitle>
+          <AlertDescription>
+            Sua conta está aguardando a verificação de documentos. Envie seu RG ou CNH.
+          </AlertDescription>
+        </Alert>
+        <Card>
+          <CardHeader>
+            <CardTitle>Envio de Documentos</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <Label>Documento de Identidade (Imagem/PDF)</Label>
+            <Input type="file" accept="image/*,.pdf" onChange={handleUpload} disabled={uploading} />
+            {documents.length > 0 && (
+              <div className="mt-4 pt-4 border-t">
+                <p className="text-sm font-medium flex justify-between">
+                  Status atual:
+                  <span
+                    className={cn(
+                      'px-2 rounded',
+                      documents[0].status === 'pending'
+                        ? 'bg-yellow-100 text-yellow-800'
+                        : 'bg-red-100 text-red-800',
+                    )}
+                  >
+                    {documents[0].status === 'pending' ? 'Em análise' : 'Rejeitado'}
+                  </span>
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)] relative rounded-xl overflow-hidden border">
       {/* Fake Map Background */}
       <div className="absolute inset-0 bg-slate-100 z-0">
         <img
           src="https://img.usecurling.com/p/1200/800?q=street%20map&color=gray&dpr=2"
-          alt="Map"
+          alt="Google Maps Mock"
           className="w-full h-full object-cover opacity-60 mix-blend-multiply"
         />
         {/* Current Location Marker */}

@@ -40,8 +40,13 @@ export default function RequestService() {
   const activeService = services.find((s) => s.id === selectedService)
   const isEmergency = type === 'emergency'
   const basePrice = activeService ? activeService.base_price : 0
+
+  // Mock distance calculation (e.g. 5km)
+  const distanceKm = 5.2
+  const distanceFee = distanceKm * 2.5 // R$ 2.50 per km
+
   const multiplier = isEmergency ? 1.2 : 1.0
-  const finalPrice = basePrice * multiplier
+  const finalPrice = (basePrice + distanceFee) * multiplier
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -194,6 +199,10 @@ export default function RequestService() {
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Diária Base</span>
                   <span>R$ {basePrice.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Deslocamento ({distanceKm}km)</span>
+                  <span>R$ {distanceFee.toFixed(2)}</span>
                 </div>
                 {isEmergency && (
                   <div className="flex justify-between text-sm text-accent font-medium">
