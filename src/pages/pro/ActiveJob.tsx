@@ -10,12 +10,31 @@ export default function ActiveJob() {
   const navigate = useNavigate()
   const { toast } = useToast()
 
+  const [distance, setDistance] = useState<number>(150)
+
+  // Geofencing mock
+  useState(() => {
+    const interval = setInterval(() => {
+      setDistance((prev) => Math.max(10, prev - 30))
+    }, 2000)
+    return () => clearInterval(interval)
+  })
+
   const handleNextStep = () => {
-    if (step === 'transit') setStep('arrived')
-    else if (step === 'arrived') {
+    if (step === 'transit') {
+      if (distance > 100) {
+        toast({
+          title: 'Erro',
+          description: 'Você precisa estar a menos de 100m do local para fazer check-in.',
+          variant: 'destructive',
+        })
+        return
+      }
+      setStep('arrived')
+    } else if (step === 'arrived') {
       toast({
         title: 'Foto enviada',
-        description: 'Check-in validado com sucesso!',
+        description: 'Check-in validado via GPS com sucesso!',
         variant: 'default',
       })
       setStep('working')
@@ -64,9 +83,19 @@ export default function ActiveJob() {
 
           <div className="space-y-4">
             {step === 'transit' && (
-              <Button className="w-full h-14 text-lg" onClick={handleNextStep}>
-                Cheguei no Local
-              </Button>
+              <>
+                <div className="flex items-center justify-between text-sm text-muted-foreground">
+                  <span>Distância atual: {distance}m</span>
+                  <span>Necessário: &lt;100m</span>
+                </div>
+                <Button
+                  className="w-full h-14 text-lg"
+                  onClick={handleNextStep}
+                  disabled={distance > 100}
+                >
+                  Clock-in (Cheguei no Local)
+                </Button>
+              </>
             )}
 
             {step === 'arrived' && (

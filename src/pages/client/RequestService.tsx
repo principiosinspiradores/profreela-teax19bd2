@@ -1,17 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { MapPin, Calendar as CalendarIcon, Info, Zap } from 'lucide-react'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { Button } from '@/components/ui/button'
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-  CardFooter,
-} from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
@@ -26,26 +19,62 @@ import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
+import { getServices, createJob } from '@/services/api'
+import { useAuth } from '@/hooks/use-auth'
 
 export default function RequestService() {
   const [date, setDate] = useState<Date>()
   const [type, setType] = useState('scheduled')
+  const [services, setServices] = useState<any[]>([])
+  const [selectedService, setSelectedService] = useState<string>('')
+  const [address, setAddress] = useState('Av. Aquidabã, 400 - Centro, Campinas')
+  const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
   const { toast } = useToast()
+  const { user } = useAuth()
 
+  useEffect(() => {
+    getServices().then(setServices)
+  }, [])
+
+  const activeService = services.find((s) => s.id === selectedService)
   const isEmergency = type === 'emergency'
-  const basePrice = 150
-  const multiplier = isEmergency ? 1.5 : 1.0
+  const basePrice = activeService ? activeService.base_price : 0
+  const multiplier = isEmergency ? 1.2 : 1.0
   const finalPrice = basePrice * multiplier
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    toast({
-      title: 'Solicitação Criada!',
-      description: 'Buscando o melhor profissional na sua região...',
-      className: 'bg-primary text-white border-none',
-    })
-    navigate('/client')
+    if (!selectedService || !user) return
+
+    setLoading(true)
+    try {
+      await createJob({
+        customer_id: user.id,
+        service_id: selectedService,
+        status: 'pending',
+        price: finalPrice,
+        type,
+        address,
+        latitude: -22.9099,
+        longitude: -47.0626,
+        scheduled_at: isEmergency
+          ? new Date().toISOString()
+          : date
+            ? date.toISOString()
+            : undefined,
+      })
+      toast({
+        title: 'Solicitação Criada!',
+        description: 'Buscando o melhor profissional na sua região...',
+        className: 'bg-primary text-white border-none',
+      })
+      navigate('/client')
+    } catch (err) {
+      toast({ title: 'Erro', description: 'Não foi possível criar.', variant: 'destructive' })
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -65,14 +94,16 @@ export default function RequestService() {
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <Label>Tipo de Profissional</Label>
-                  <Select defaultValue="faxina">
+                  <Select value={selectedService} onValueChange={setSelectedService} required>
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione..." />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="faxina">Faxineira Comercial</SelectItem>
-                      <SelectItem value="camareira">Camareira</SelectItem>
-                      <SelectItem value="ajudante">Ajudante Geral</SelectItem>
+                      {services.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.name} - R$ {s.base_price.toFixed(2)}/h
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -85,7 +116,8 @@ export default function RequestService() {
                       className="pl-9"
                       placeholder="Rua, Número, Bairro"
                       required
-                      defaultValue="Av. Aquidabã, 400 - Centro, Campinas"
+                      value={address}
+                      onChange={(e) => setAddress(e.target.value)}
                     />
                   </div>
                 </div>
@@ -116,7 +148,7 @@ export default function RequestService() {
                           <Zap className="h-3 w-3" /> Emergência
                         </span>
                         <span className="text-xs text-muted-foreground">
-                          Atendimento imediato (+50%)
+                          Atendimento imediato (+20%)
                         </span>
                       </Label>
                     </div>
@@ -168,7 +200,7 @@ export default function RequestService() {
                     <span className="flex items-center gap-1">
                       Taxa Emergência <Info className="h-3 w-3" />
                     </span>
-                    <span>+ R$ {(basePrice * 0.5).toFixed(2)}</span>
+                    <span>+ R$ {(basePrice * 0.2).toFixed(2)}</span>
                   </div>
                 )}
                 <div className="border-t pt-4 mt-2">
@@ -182,7 +214,11 @@ export default function RequestService() {
                 </div>
               </CardContent>
               <CardFooter>
-                <Button type="submit" className="w-full h-12 text-lg">
+                <Button
+                  type="submit"
+                  className="w-full h-12 text-lg"
+                  disabled={loading || !selectedService}
+                >
                   Confirmar Pedido
                 </Button>
               </CardFooter>

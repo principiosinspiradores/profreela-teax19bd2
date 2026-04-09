@@ -1,7 +1,7 @@
 import { Outlet, Link, useNavigate } from 'react-router-dom'
 import { Briefcase } from 'lucide-react'
 import { SidebarProvider, SidebarTrigger, SidebarInset } from '@/components/ui/sidebar'
-import { useAuthStore } from '@/stores/useAuthStore'
+import { useAuth } from '@/hooks/use-auth'
 import { AppSidebar } from './AppSidebar'
 import { Button } from '@/components/ui/button'
 
@@ -41,7 +41,7 @@ function AuthenticatedHeader() {
 }
 
 export default function Layout() {
-  const { role } = useAuthStore()
+  const { role } = useAuth()
 
   if (role === 'guest') {
     return (

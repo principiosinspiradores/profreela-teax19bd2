@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { CheckCircle2, Star, ShieldCheck, Clock } from 'lucide-react'
 import { AuthDialog } from '@/components/auth/AuthDialog'
-import { Role } from '@/stores/useAuthStore'
+import type { Role } from '@/hooks/use-auth'
 
 export default function Index() {
   const [authOpen, setAuthOpen] = useState(false)

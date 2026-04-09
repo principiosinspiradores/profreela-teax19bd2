@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react'
 import {
   Table,
   TableBody,
@@ -9,47 +10,22 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Download, Star } from 'lucide-react'
-
-const historyData = [
-  {
-    id: '1029',
-    date: '12/04/2026',
-    type: 'Faxina Comercial',
-    pro: 'Ana Silva',
-    value: 150.0,
-    status: 'completed',
-    rating: 5,
-  },
-  {
-    id: '1028',
-    date: '05/04/2026',
-    type: 'Camareira',
-    pro: 'Juliana Costa',
-    value: 180.0,
-    status: 'completed',
-    rating: 4,
-  },
-  {
-    id: '1025',
-    date: '28/03/2026',
-    type: 'Faxina (Emergência)',
-    pro: 'Roberto Santos',
-    value: 225.0,
-    status: 'completed',
-    rating: 5,
-  },
-  {
-    id: '1022',
-    date: '15/03/2026',
-    type: 'Ajudante Geral',
-    pro: 'Marcos Lima',
-    value: 140.0,
-    status: 'cancelled',
-    rating: null,
-  },
-]
+import { useAuth } from '@/hooks/use-auth'
+import { getClientJobs } from '@/services/api'
+import { format } from 'date-fns'
 
 export default function ClientHistory() {
+  const { user } = useAuth()
+  const [jobs, setJobs] = useState<any[]>([])
+
+  useEffect(() => {
+    if (user) {
+      getClientJobs(user.id).then((res) =>
+        setJobs(res.filter((j) => ['completed', 'cancelled'].includes(j.status))),
+      )
+    }
+  }, [user])
+
   return (
     <div className="space-y-6 max-w-6xl mx-auto w-full">
       <div>
@@ -73,20 +49,13 @@ export default function ClientHistory() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {historyData.map((job) => (
+            {jobs.map((job) => (
               <TableRow key={job.id}>
-                <TableCell className="font-medium">#{job.id}</TableCell>
-                <TableCell>{job.date}</TableCell>
-                <TableCell>{job.type}</TableCell>
+                <TableCell className="font-medium">#{job.id.slice(0, 6)}</TableCell>
+                <TableCell>{format(new Date(job.created), 'dd/MM/yyyy')}</TableCell>
+                <TableCell>{job.expand?.service_id?.name}</TableCell>
                 <TableCell>
-                  <div className="flex items-center gap-2">
-                    {job.pro}
-                    {job.rating && (
-                      <span className="flex items-center text-xs text-accent bg-accent/10 px-1.5 py-0.5 rounded">
-                        {job.rating} <Star className="h-3 w-3 ml-0.5 fill-accent" />
-                      </span>
-                    )}
-                  </div>
+                  <div className="flex items-center gap-2">{job.expand?.pro_id?.name || '-'}</div>
                 </TableCell>
                 <TableCell>
                   {job.status === 'completed' ? (
@@ -105,7 +74,7 @@ export default function ClientHistory() {
                     </Badge>
                   )}
                 </TableCell>
-                <TableCell className="text-right">R$ {job.value.toFixed(2)}</TableCell>
+                <TableCell className="text-right">R$ {job.price.toFixed(2)}</TableCell>
                 <TableCell className="text-center">
                   <Button
                     variant="ghost"
@@ -118,6 +87,13 @@ export default function ClientHistory() {
                 </TableCell>
               </TableRow>
             ))}
+            {jobs.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={7} className="text-center text-muted-foreground">
+                  Nenhum histórico encontrado.
+                </TableCell>
+              </TableRow>
+            )}
           </TableBody>
         </Table>
       </div>

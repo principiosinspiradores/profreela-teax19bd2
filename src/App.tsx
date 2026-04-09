@@ -3,7 +3,7 @@ import { Toaster } from '@/components/ui/toaster'
 import { Toaster as Sonner } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 
-import { AuthProvider, useAuthStore } from '@/stores/useAuthStore'
+import { AuthProvider, useAuth } from '@/hooks/use-auth'
 import Layout from './components/Layout'
 import Index from './pages/Index'
 import NotFound from './pages/NotFound'
@@ -26,7 +26,8 @@ function ProtectedRoute({
   allowedRoles: string[]
   children: JSX.Element
 }) {
-  const { role } = useAuthStore()
+  const { role, loading } = useAuth()
+  if (loading) return <div>Loading...</div>
   if (!allowedRoles.includes(role)) return <Navigate to="/" replace />
   return children
 }

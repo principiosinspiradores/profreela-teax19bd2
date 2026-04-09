@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { MapPin, Navigation, Clock, CheckCircle2 } from 'lucide-react'
+import { MapPin, Navigation, Clock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
@@ -12,25 +12,45 @@ import {
 } from '@/components/ui/dialog'
 import { useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
+import { useAuth } from '@/hooks/use-auth'
+import { getProJobs, updateJob } from '@/services/api'
+import { useRealtime } from '@/hooks/use-realtime'
+import { useToast } from '@/hooks/use-toast'
 
 export default function ProDashboard() {
   const [isOnline, setIsOnline] = useState(false)
-  const [showJobOffer, setShowJobOffer] = useState(false)
+  const [pendingJob, setPendingJob] = useState<any>(null)
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const { toast } = useToast()
+
+  const loadJobs = async () => {
+    if (!user || !isOnline) return
+    const jobs = await getProJobs(user.id)
+    const pending = jobs.find((j) => j.status === 'pending')
+    if (pending && pending.id !== pendingJob?.id) {
+      setPendingJob(pending)
+    }
+  }
 
   useEffect(() => {
-    let timeout: NodeJS.Timeout
-    if (isOnline) {
-      timeout = setTimeout(() => setShowJobOffer(true), 3000)
-    } else {
-      setShowJobOffer(false)
-    }
-    return () => clearTimeout(timeout)
-  }, [isOnline])
+    loadJobs()
+  }, [user, isOnline])
+  useRealtime('jobs', loadJobs, isOnline)
 
-  const acceptJob = () => {
-    setShowJobOffer(false)
-    navigate('/pro/job/123')
+  const acceptJob = async () => {
+    if (!pendingJob) return
+    try {
+      await updateJob(pendingJob.id, { status: 'accepted', pro_id: user?.id })
+      setPendingJob(null)
+      navigate(`/pro/job/${pendingJob.id}`)
+    } catch {
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível aceitar a solicitação.',
+        variant: 'destructive',
+      })
+    }
   }
 
   return (
@@ -88,47 +108,49 @@ export default function ProDashboard() {
       </div>
 
       {/* Job Offer Dialog */}
-      <Dialog open={showJobOffer} onOpenChange={setShowJobOffer}>
+      <Dialog open={!!pendingJob} onOpenChange={(o) => !o && setPendingJob(null)}>
         <DialogContent className="sm:max-w-md rounded-2xl border-accent border-2 shadow-2xl animate-fade-in-up">
           <DialogHeader>
             <div className="mx-auto bg-accent/10 w-16 h-16 rounded-full flex items-center justify-center mb-2 animate-pulse">
               <Clock className="h-8 w-8 text-accent" />
             </div>
             <DialogTitle className="text-center text-2xl font-bold">
-              Nova Solicitação: Faxina
+              Nova Solicitação: {pendingJob?.expand?.service_id?.name}
             </DialogTitle>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
             <div className="flex justify-between items-center bg-muted/50 p-4 rounded-xl">
               <span className="text-muted-foreground">Valor Estimado</span>
-              <span className="text-2xl font-bold text-secondary">R$ 85,00</span>
+              <span className="text-2xl font-bold text-secondary">
+                R$ {pendingJob?.price?.toFixed(2)}
+              </span>
             </div>
 
             <div className="grid gap-3 text-sm">
               <div className="flex items-center gap-3">
                 <MapPin className="h-5 w-5 text-muted-foreground" />
                 <div>
-                  <p className="font-medium">Hotel Plaza Campinas</p>
-                  <p className="text-muted-foreground">A 3.2 km de distância</p>
+                  <p className="font-medium">{pendingJob?.expand?.customer_id?.name}</p>
+                  <p className="text-muted-foreground">{pendingJob?.address}</p>
                 </div>
               </div>
               <div className="flex items-center gap-3">
                 <Navigation className="h-5 w-5 text-muted-foreground" />
                 <div>
-                  <p className="font-medium">Início Imediato (Emergência)</p>
-                  <p className="text-accent font-medium">Multiplicador 1.5x ativo!</p>
+                  <p className="font-medium">
+                    {pendingJob?.type === 'emergency' ? 'Início Imediato (Emergência)' : 'Agendado'}
+                  </p>
+                  {pendingJob?.type === 'emergency' && (
+                    <p className="text-accent font-medium">Multiplicador de emergência ativo!</p>
+                  )}
                 </div>
               </div>
             </div>
           </div>
 
           <DialogFooter className="flex-col sm:flex-row gap-2 mt-2">
-            <Button
-              variant="outline"
-              className="w-full h-12"
-              onClick={() => setShowJobOffer(false)}
-            >
+            <Button variant="outline" className="w-full h-12" onClick={() => setPendingJob(null)}>
               Recusar
             </Button>
             <Button

@@ -1,5 +1,7 @@
+import { useState, useEffect } from 'react'
 import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import {
   ChartConfig,
   ChartContainer,
@@ -7,6 +9,8 @@ import {
   ChartTooltipContent,
 } from '@/components/ui/chart'
 import { Users, Activity, DollarSign, AlertTriangle } from 'lucide-react'
+import { getModerationLogs, createModerationLog } from '@/services/api'
+import { useToast } from '@/hooks/use-toast'
 
 const demandData = [
   { time: '06:00', demand: 40, supply: 60 },
@@ -22,6 +26,18 @@ const chartConfig = {
 } satisfies ChartConfig
 
 export default function AdminDashboard() {
+  const [logs, setLogs] = useState<any[]>([])
+  const { toast } = useToast()
+
+  useEffect(() => {
+    getModerationLogs().then(setLogs)
+  }, [])
+
+  const handleAction = async (type: string) => {
+    await createModerationLog({ pro_id: 'sample', type, reason: 'Manual review' })
+    toast({ title: 'Ação executada', description: `Usuário marcado com ${type}.` })
+  }
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto w-full">
       <div className="flex justify-between items-end">
@@ -107,30 +123,42 @@ export default function AdminDashboard() {
 
         <Card className="lg:col-span-3">
           <CardHeader>
-            <CardTitle>Aprovações Recentes</CardTitle>
+            <CardTitle>Moderação de Profissionais</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {[1, 2, 3, 4].map((i) => (
-              <div
-                key={i}
-                className="flex items-center justify-between border-b pb-4 last:border-0 last:pb-0"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
-                    <Users className="h-5 w-5 text-muted-foreground" />
-                  </div>
-                  <div>
-                    <p className="font-medium">Carlos E. {i}</p>
-                    <p className="text-xs text-muted-foreground">Ajudante Geral • Doc. Pendente</p>
-                  </div>
+            <div className="flex items-center justify-between border-b pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
+                  <Users className="h-5 w-5 text-muted-foreground" />
                 </div>
-                <div className="flex gap-2">
-                  <button className="text-xs bg-secondary/10 text-secondary px-2 py-1 rounded hover:bg-secondary hover:text-white transition-colors">
-                    Aprovar
-                  </button>
+                <div>
+                  <p className="font-medium">Carlos E.</p>
+                  <p className="text-xs text-muted-foreground">Reclamação de Cliente</p>
                 </div>
               </div>
-            ))}
+              <div className="flex gap-2">
+                <Button variant="outline" size="sm" onClick={() => handleAction('warning')}>
+                  Advertir
+                </Button>
+                <Button variant="destructive" size="sm" onClick={() => handleAction('block')}>
+                  Bloquear
+                </Button>
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <h4 className="text-sm font-bold mb-2">Heatmap Simulado</h4>
+              <div className="h-32 bg-muted rounded-xl relative overflow-hidden border">
+                <img
+                  src="https://img.usecurling.com/p/400/200?q=heatmap"
+                  className="w-full h-full object-cover opacity-70 mix-blend-multiply"
+                  alt="Heatmap"
+                />
+                <div className="absolute top-2 left-2 bg-black/50 text-white text-xs px-2 py-1 rounded">
+                  Campinas (Alta Demanda)
+                </div>
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>

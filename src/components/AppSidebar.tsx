@@ -11,11 +11,11 @@ import {
   SidebarHeader,
   SidebarFooter,
 } from '@/components/ui/sidebar'
-import { useAuthStore } from '@/stores/useAuthStore'
+import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
 
 export function AppSidebar() {
-  const { role, logout, user } = useAuthStore()
+  const { role, signOut, user } = useAuth()
   const location = useLocation()
 
   const getMenu = () => {
@@ -80,7 +80,7 @@ export function AppSidebar() {
             <span className="text-xs text-muted-foreground capitalize">{role}</span>
           </div>
         </div>
-        <Button variant="outline" className="w-full" onClick={logout}>
+        <Button variant="outline" className="w-full" onClick={signOut}>
           Sair
         </Button>
       </SidebarFooter>
