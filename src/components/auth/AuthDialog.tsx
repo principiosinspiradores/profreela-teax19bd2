@@ -15,6 +15,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { useToast } from '@/hooks/use-toast'
 import { getErrorMessage, extractFieldErrors, type FieldErrors } from '@/lib/pocketbase/errors'
 import { Briefcase } from 'lucide-react'
+import pb from '@/lib/pocketbase/client'
 
 interface AuthDialogProps {
   open: boolean
@@ -76,9 +77,14 @@ export function AuthDialog({ open, onOpenChange, initialRole = 'client' }: AuthD
         })
       } else {
         onOpenChange(false)
-        if (initialRole === 'pro') navigate('/pro')
-        else if (initialRole === 'client') navigate('/client')
-        else if (initialRole === 'admin') navigate('/admin')
+        // Redirect based on the user's ACTUAL role, not the selected dialog role.
+        // This ensures an admin who logs in via the client/pro dialog still
+        // lands on /admin, a pro lands on /pro, etc.
+        const role = (pb.authStore.record as any)?.role as Role | undefined
+        if (role === 'admin') navigate('/admin')
+        else if (role === 'pro') navigate('/pro')
+        else if (role === 'client') navigate('/client')
+        else navigate('/')
       }
     } finally {
       setLoading(false)

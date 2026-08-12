@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { Toaster } from '@/components/ui/toaster'
 import { Toaster as Sonner } from '@/components/ui/sonner'
@@ -17,17 +18,22 @@ import ClientRequest from './pages/client/RequestService'
 import ClientHistory from './pages/client/History'
 
 import AdminDashboard from './pages/admin/Dashboard'
+import AdminSettings from './pages/admin/Settings'
 
-// Simple route guard component
+// Route guard: only allows authenticated users with one of `allowedRoles`.
+// Visitors (guests) are sent to the landing page; authenticated users with a
+// different role are redirected to their own dashboard. This enforces role-based
+// access to /admin, /pro and /client at the routing layer.
 function ProtectedRoute({
   allowedRoles,
   children,
 }: {
   allowedRoles: string[]
-  children: JSX.Element
+  children: ReactNode
 }) {
   const { role, loading } = useAuth()
-  if (loading) return <div>Loading...</div>
+  if (loading) return <div className="p-8 text-muted-foreground">Carregando...</div>
+  if (role === 'guest') return <Navigate to="/" replace />
   if (!allowedRoles.includes(role)) {
     if (role === 'client') return <Navigate to="/client" replace />
     if (role === 'pro') return <Navigate to="/pro" replace />
@@ -103,13 +109,21 @@ const AppRoutes = () => (
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/admin/settings"
+        element={
+          <ProtectedRoute allowedRoles={['admin']}>
+            <AdminSettings />
+          </ProtectedRoute>
+        }
+      />
     </Route>
     <Route path="*" element={<NotFound />} />
   </Routes>
 )
 
 const App = () => (
-  <BrowserRouter future={{ v7_startTransition: false, v7_relativeSplatPath: false }}>
+  <BrowserRouter>
     <AuthProvider>
       <TooltipProvider>
         <Toaster />

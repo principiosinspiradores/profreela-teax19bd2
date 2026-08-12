@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { CheckCircle2, Star, ShieldCheck, Clock } from 'lucide-react'
+import { CheckCircle2, Star, ShieldCheck } from 'lucide-react'
 import { AuthDialog } from '@/components/auth/AuthDialog'
 import type { Role } from '@/hooks/use-auth'
 
@@ -88,13 +88,66 @@ export default function Index() {
         </div>
       </section>
 
-      {/* Admin shortcut for demo purposes */}
-      <div className="container py-8 text-center border-t border-muted">
-        <p className="text-sm text-muted-foreground mb-2">Área restrita (Apenas Demo)</p>
-        <Button variant="ghost" size="sm" onClick={() => openAuth('admin')}>
-          Acessar Painel Admin
-        </Button>
-      </div>
+      {/* How it works */}
+      <section className="container py-20">
+        <div className="text-center max-w-2xl mx-auto mb-14">
+          <h2 className="text-3xl md:text-4xl font-bold tracking-tight mb-4">Como funciona</h2>
+          <p className="text-lg text-muted-foreground">
+            Três passos simples para contratar o profissional certo, no momento certo.
+          </p>
+        </div>
+        <div className="grid md:grid-cols-3 gap-8">
+          {[
+            {
+              icon: CheckCircle2,
+              title: '1. Solicite',
+              desc: 'Descreva o serviço, informe o endereço e escolha agendado ou emergencial.',
+            },
+            {
+              icon: Star,
+              title: '2. Receba propostas',
+              desc: 'Profissionais verificados próximos a você respondem em minutos.',
+            },
+            {
+              icon: ShieldCheck,
+              title: '3. Acompanhe',
+              desc: 'Acompanhe o serviço em tempo real e pague com segurança pela plataforma.',
+            },
+          ].map((step) => (
+            <div
+              key={step.title}
+              className="flex flex-col items-center text-center p-6 rounded-2xl border bg-card"
+            >
+              <div className="bg-primary/10 p-4 rounded-full mb-4">
+                <step.icon className="h-7 w-7 text-primary" />
+              </div>
+              <h3 className="font-bold text-lg mb-2">{step.title}</h3>
+              <p className="text-sm text-muted-foreground">{step.desc}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Final CTA */}
+      <section className="container pb-24 pt-4 text-center">
+        <h2 className="text-3xl md:text-4xl font-bold tracking-tight mb-4">Pronto para começar?</h2>
+        <p className="text-lg text-muted-foreground mb-8 max-w-xl mx-auto">
+          Junte-se a empresas que já otimizam suas contratações operacionais com a ProFreela.
+        </p>
+        <div className="flex flex-col sm:flex-row gap-4 justify-center">
+          <Button size="lg" className="h-14 text-base shadow-lg" onClick={() => openAuth('client')}>
+            Quero Contratar
+          </Button>
+          <Button
+            size="lg"
+            variant="outline"
+            className="h-14 text-base bg-white"
+            onClick={() => openAuth('pro')}
+          >
+            Quero Trabalhar
+          </Button>
+        </div>
+      </section>
     </>
   )
 }

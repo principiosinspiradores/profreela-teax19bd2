@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-09T15:41:43.291Z",
+  "generatedAt": "2026-08-12T18:11:50.538Z",
   "collections": [
     {
       "name": "users",
@@ -637,6 +637,100 @@
         {
           "name": "duration",
           "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": []
+    },
+    {
+      "name": "settings",
+      "type": "base",
+      "apiRules": {
+        "list": "",
+        "view": "",
+        "create": "@request.auth.role = 'admin'",
+        "update": "@request.auth.role = 'admin'",
+        "delete": "@request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "name",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "service_fee_percent",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "emergency_margin_percent",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "scheduled_margin_percent",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "demand_factors",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "price_per_km",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "min_service_fee",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "module_chat_enabled",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "module_reviews_enabled",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "module_referrals_enabled",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "module_dynamic_pricing_enabled",
+          "type": "bool",
           "required": false,
           "system": false
         },
