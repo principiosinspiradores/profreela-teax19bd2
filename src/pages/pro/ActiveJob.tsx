@@ -1,16 +1,20 @@
 import { useState } from 'react'
-import { MapPin, Navigation2, Camera, CheckCircle } from 'lucide-react'
+import { MapPin, Navigation2, Camera, CheckCircle, Lock } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { useToast } from '@/hooks/use-toast'
+import { updateJob } from '@/services/api'
+import { releasePayment } from '@/services/checkout'
 
 export default function ActiveJob() {
   const [step, setStep] = useState<'transit' | 'arrived' | 'working' | 'finished'>('transit')
   const navigate = useNavigate()
   const { toast } = useToast()
+  const { id: jobId } = useParams<{ id: string }>()
 
   const [distance, setDistance] = useState<number>(150)
+  const [finishing, setFinishing] = useState(false)
 
   // Geofencing mock
   useState(() => {
@@ -20,7 +24,7 @@ export default function ActiveJob() {
     return () => clearInterval(interval)
   })
 
-  const handleNextStep = () => {
+  const handleNextStep = async () => {
     if (step === 'transit') {
       if (distance > 100) {
         toast({
@@ -32,6 +36,14 @@ export default function ActiveJob() {
       }
       setStep('arrived')
     } else if (step === 'arrived') {
+      // clock-in — record timestamp so the 24h auto-cancel rule is satisfied.
+      if (jobId) {
+        try {
+          await updateJob(jobId, { clocked_in_at: new Date().toISOString() })
+        } catch (_) {
+          /* non-fatal */
+        }
+      }
       toast({
         title: 'Foto enviada',
         description: 'Check-in validado via GPS com sucesso!',
@@ -39,12 +51,31 @@ export default function ActiveJob() {
       })
       setStep('working')
     } else if (step === 'working') {
-      toast({
-        title: 'Serviço finalizado',
-        description: 'Pagamento liberado na carteira.',
-        variant: 'default',
-      })
-      navigate('/pro')
+      // clock-out + completion -> start the 7-day guarantee window.
+      setFinishing(true)
+      try {
+        if (jobId) {
+          await updateJob(jobId, {
+            status: 'completed',
+            completed_at: new Date().toISOString(),
+          })
+          await releasePayment(jobId)
+        }
+        toast({
+          title: 'Serviço finalizado',
+          description: 'Iniciado o período de garantia de 7 dias. O pagamento será liberado após.',
+          variant: 'default',
+        })
+        navigate('/pro')
+      } catch {
+        toast({
+          title: 'Erro',
+          description: 'Não foi possível finalizar o serviço.',
+          variant: 'destructive',
+        })
+      } finally {
+        setFinishing(false)
+      }
     }
   }
 
@@ -119,11 +150,22 @@ export default function ActiveJob() {
                   <CheckCircle className="h-10 w-10 text-secondary" />
                 </div>
                 <h3 className="text-2xl font-bold mb-2">Trabalho em Execução</h3>
-                <p className="text-muted-foreground mb-8">
+                <p className="text-muted-foreground mb-4">
                   O cronômetro está rodando. Faça um ótimo trabalho!
                 </p>
-                <Button className="w-full h-14 text-lg bg-slate-900" onClick={handleNextStep}>
-                  Finalizar Serviço
+                <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900 flex gap-2 mb-6 max-w-sm mx-auto">
+                  <Lock className="h-4 w-4 mt-0.5 shrink-0" />
+                  <span>
+                    Ao finalizar, inicia o período de garantia de 7 dias. Seu pagamento será
+                    liberado após esse prazo, caso não haja disputa.
+                  </span>
+                </div>
+                <Button
+                  className="w-full h-14 text-lg bg-slate-900"
+                  onClick={handleNextStep}
+                  disabled={finishing}
+                >
+                  {finishing ? 'Finalizando...' : 'Finalizar Serviço'}
                 </Button>
               </div>
             )}

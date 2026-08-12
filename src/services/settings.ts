@@ -24,6 +24,8 @@ export interface PlatformSettings {
   module_reviews_enabled: boolean
   module_referrals_enabled: boolean
   module_dynamic_pricing_enabled: boolean
+  guarantee_period_days: number
+  clock_in_deadline_hours: number
   updated?: string
 }
 
@@ -38,6 +40,8 @@ const DEFAULT_SETTINGS: PlatformSettings = {
   module_reviews_enabled: true,
   module_referrals_enabled: true,
   module_dynamic_pricing_enabled: true,
+  guarantee_period_days: 7,
+  clock_in_deadline_hours: 24,
 }
 
 /** Fetch the current platform settings (public). Falls back to defaults. */

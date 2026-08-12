@@ -29,6 +29,8 @@ routerAdd('GET', '/backend/v1/settings', (e) => {
       module_reviews_enabled: record.getBool('module_reviews_enabled'),
       module_referrals_enabled: record.getBool('module_referrals_enabled'),
       module_dynamic_pricing_enabled: record.getBool('module_dynamic_pricing_enabled'),
+      guarantee_period_days: record.getFloat('guarantee_period_days') || 7,
+      clock_in_deadline_hours: record.getFloat('clock_in_deadline_hours') || 24,
       updated: record.getString('updated'),
     },
   })

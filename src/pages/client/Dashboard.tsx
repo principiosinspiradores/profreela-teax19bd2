@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { PlusCircle, Clock, Shield, MapPin, CreditCard, QrCode } from 'lucide-react'
+import { PlusCircle, Clock, Shield, MapPin, CreditCard, QrCode, AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -19,6 +19,9 @@ import { getClientJobs, getBanners, getNearbyPros, updateJob } from '@/services/
 import { useRealtime } from '@/hooks/use-realtime'
 import { useToast } from '@/hooks/use-toast'
 import { getAvatarUrl } from '@/lib/avatar'
+import { PaymentStatusBadge } from '@/components/PaymentStatusBadge'
+import { DisputeDialog } from '@/components/DisputeDialog'
+import { createSplitPayment, releasePayment, type PaymentState } from '@/services/checkout'
 
 export default function ClientDashboard() {
   const { user } = useAuth()
@@ -30,6 +33,7 @@ export default function ClientDashboard() {
   const [paymentJob, setPaymentJob] = useState<any>(null)
   const [paymentMethod, setPaymentMethod] = useState('credit_card')
   const [processingPayment, setProcessingPayment] = useState(false)
+  const [disputeJob, setDisputeJob] = useState<any>(null)
 
   const loadData = async () => {
     if (!user) return
@@ -50,16 +54,40 @@ export default function ClientDashboard() {
     if (!paymentJob) return
     setProcessingPayment(true)
     try {
-      // Simulate payment processing
-      await new Promise((r) => setTimeout(r, 1500))
+      // Pre-authorize (manual capture) the amount on the customer's card.
+      await createSplitPayment({
+        amount: paymentJob.price,
+        proAccountId: paymentJob.pro_id || paymentJob.expand?.pro_id?.id || '',
+        description: paymentJob.expand?.service_id?.name || 'Serviço ProFreela',
+        jobId: paymentJob.id,
+      })
+      // The amount is held, not captured. Service moves to in_progress.
       await updateJob(paymentJob.id, { status: 'in_progress' })
-      toast({ title: 'Pagamento Aprovado!', description: 'O serviço foi pago com sucesso.' })
+      toast({
+        title: 'Pagamento pré-autorizado',
+        description:
+          'Valor reservado no cartão. A cobrança ocorre 7 dias após a conclusão do serviço.',
+      })
       setPaymentJob(null)
       loadData()
     } catch (err) {
       toast({ title: 'Erro no pagamento', variant: 'destructive' })
     } finally {
       setProcessingPayment(false)
+    }
+  }
+
+  const handleComplete = async (job: any) => {
+    try {
+      await updateJob(job.id, { status: 'completed', completed_at: new Date().toISOString() })
+      await releasePayment(job.id)
+      toast({
+        title: 'Serviço concluído',
+        description: 'Iniciado o período de garantia de 7 dias. O pagamento será liberado após.',
+      })
+      loadData()
+    } catch {
+      toast({ title: 'Erro', description: 'Não foi possível concluir.', variant: 'destructive' })
     }
   }
 
@@ -182,6 +210,11 @@ export default function ClientDashboard() {
                         </p>
                       </div>
                     </div>
+                    {job.payment_status && (
+                      <div className="mt-2">
+                        <PaymentStatusBadge state={job as PaymentState} />
+                      </div>
+                    )}
                     {job.expand?.pro_id && (
                       <div className="flex items-center gap-3 mt-4 pt-4 border-t">
                         <img
@@ -196,13 +229,36 @@ export default function ClientDashboard() {
                             className="ml-auto bg-green-600 hover:bg-green-700 text-white"
                             onClick={() => setPaymentJob(job)}
                           >
-                            Pagar Serviço
+                            Pré-autorizar
                           </Button>
                         ) : (
-                          <Button variant="link" size="sm" className="ml-auto h-auto py-0">
-                            Enviar Mensagem
-                          </Button>
+                          <div className="ml-auto flex items-center gap-2">
+                            {job.status === 'in_progress' && (
+                              <Button
+                                size="sm"
+                                variant="default"
+                                onClick={() => handleComplete(job)}
+                              >
+                                Concluir Serviço
+                              </Button>
+                            )}
+                            <Button variant="link" size="sm" className="h-auto py-0">
+                              Enviar Mensagem
+                            </Button>
+                          </div>
                         )}
+                      </div>
+                    )}
+                    {job.payment_status === 'held' && (
+                      <div className="flex items-center gap-2 mt-3">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-amber-700 border-amber-300"
+                          onClick={() => setDisputeJob(job)}
+                        >
+                          <AlertTriangle className="h-4 w-4 mr-1" /> Reportar Problema
+                        </Button>
                       </div>
                     )}
                   </div>
@@ -219,12 +275,13 @@ export default function ClientDashboard() {
           <DialogHeader>
             <DialogTitle>Pagamento Seguro</DialogTitle>
             <DialogDescription>
-              Conclua o pagamento (Stripe / Mercado Pago) para iniciar o serviço com o profissional.
+              O valor é <strong>pré-autorizado</strong> (escrow): reservado no cartão, sem cobrança
+              imediata. A captura acontece 7 dias após a conclusão do serviço.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4">
             <div className="flex justify-between items-center bg-muted/50 p-4 rounded-xl">
-              <span className="font-medium text-muted-foreground">Valor Total</span>
+              <span className="font-medium text-muted-foreground">Valor Pré-autorizado</span>
               <span className="text-2xl font-bold text-primary">
                 R$ {paymentJob?.price?.toFixed(2)}
               </span>
@@ -261,11 +318,18 @@ export default function ClientDashboard() {
               Cancelar
             </Button>
             <Button onClick={handlePayment} disabled={processingPayment}>
-              {processingPayment ? 'Processando...' : 'Confirmar Pagamento'}
+              {processingPayment ? 'Pré-autorizando...' : 'Pré-autorizar Pagamento'}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <DisputeDialog
+        jobId={disputeJob?.id ?? null}
+        open={!!disputeJob}
+        onOpenChange={(o) => !o && setDisputeJob(null)}
+        onDisputed={loadData}
+      />
     </div>
   )
 }

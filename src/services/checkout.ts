@@ -15,13 +15,33 @@ export interface PaymentSplit {
   minFee: number
 }
 
+/** Lifecycle status of an escrow payment stored on a job record. */
+export type PaymentStatus =
+  | 'authorized'
+  | 'held'
+  | 'released'
+  | 'captured'
+  | 'disputed'
+  | 'cancelled'
+  | ''
+
+/** Job record augmented with the escrow fields (subset). */
+export interface PaymentState {
+  payment_status: PaymentStatus
+  payment_intent_id?: string
+  payment_authorized_at?: string
+  payment_hold_until?: string
+  payment_released_at?: string
+  payment_disputed_at?: string
+  dispute_reason?: string
+}
+
 /**
- * Payment gateway integration (Stripe / Mercado Pago).
- *
- * Public keys are fetched from the backend (which reads them from env secrets)
- * so the client can bootstrap the gateway SDK. The SECRET keys live only in the
- * backend environment and are used server-side to create the charge with a
- * platform-fee split (the platform keeps the configured service fee).
+ * Payment gateway integration (Stripe / Mercado Pago) with manual-capture
+ * (escrow) flow. The customer's card is pre-authorized when a professional
+ * accepts the request; the capture + platform-fee split happens only after
+ * the 7-day guarantee window. Disputes pause the window; if the pro never
+ * clocks in within 24h, the authorization is cancelled.
  */
 
 /** Get the configured gateway + its public key (or null if none configured). */
@@ -66,16 +86,16 @@ export function computeSplit(
 }
 
 /**
- * Create a payment intent with the platform-fee split applied.
- * The backend reads the service fee from the `settings` collection and uses the
- * configured gateway's secret key to create the charge (Stripe Connect transfer
- * or Mercado Pago marketplace split).
+ * Create a pre-authorization (manual capture) on the customer's card.
+ * The amount is held — NOT captured — until captureSplitPayment is called
+ * after the guarantee window.
  */
 export async function createSplitPayment(params: {
   amount: number
   currency?: string
   proAccountId: string
   description?: string
+  jobId?: string
 }): Promise<any> {
   const res = await pb.send('/backend/v1/payments/create-split', {
     method: 'POST',
@@ -84,9 +104,48 @@ export async function createSplitPayment(params: {
       currency: params.currency || 'brl',
       proAccountId: params.proAccountId,
       description: params.description || 'Serviço ProFreela',
+      jobId: params.jobId || '',
     },
   })
   return res
+}
+
+/**
+ * Start the 7-day guarantee window (called on service completion).
+ * Sets the job's payment_status to "held" and stores payment_hold_until.
+ */
+export async function releasePayment(jobId: string): Promise<any> {
+  return pb.send('/backend/v1/payments/release-payment', {
+    method: 'POST',
+    body: { jobId },
+  })
+}
+
+/**
+ * Capture the pre-authorization and apply the platform-fee split.
+ * Only callable after the guarantee window has elapsed (or with admin force).
+ */
+export async function captureSplitPayment(jobId: string, force = false): Promise<any> {
+  return pb.send('/backend/v1/payments/capture-split', {
+    method: 'POST',
+    body: { jobId, force },
+  })
+}
+
+/** Open a dispute — pauses the guarantee window. */
+export async function disputePayment(jobId: string, reason: string): Promise<any> {
+  return pb.send('/backend/v1/payments/dispute-payment', {
+    method: 'POST',
+    body: { jobId, reason },
+  })
+}
+
+/** Cancel the pre-authorization (auto-refund). Used on missed clock-in. */
+export async function cancelAuthorization(jobId: string): Promise<any> {
+  return pb.send('/backend/v1/payments/cancel-auth', {
+    method: 'POST',
+    body: { jobId },
+  })
 }
 
 /**
@@ -97,4 +156,55 @@ export async function getCheckoutPreview(amount: number, currency = 'brl') {
   const [settings, config] = await Promise.all([getSettings(), getPaymentConfig()])
   const split = computeSplit(amount, settings, currency)
   return { settings, config, split }
+}
+
+/* ------------------------------------------------------------------ */
+/* UI helpers                                                          */
+/* ------------------------------------------------------------------ */
+
+const STATUS_LABELS: Record<string, string> = {
+  authorized: 'Pré-autorizado',
+  held: 'Em garantia',
+  released: 'Liberado',
+  captured: 'Capturado',
+  disputed: 'Em disputa',
+  cancelled: 'Cancelado',
+}
+
+const STATUS_TONES: Record<string, string> = {
+  authorized: 'bg-blue-100 text-blue-800 border-blue-200',
+  held: 'bg-amber-100 text-amber-800 border-amber-200',
+  released: 'bg-green-100 text-green-800 border-green-200',
+  captured: 'bg-green-100 text-green-800 border-green-200',
+  disputed: 'bg-red-100 text-red-800 border-red-200',
+  cancelled: 'bg-slate-200 text-slate-700 border-slate-300',
+}
+
+export function paymentStatusLabel(status: PaymentStatus): string {
+  return status ? STATUS_LABELS[status] : '—'
+}
+
+export function paymentStatusTone(status: PaymentStatus): string {
+  return status ? STATUS_TONES[status] : 'bg-muted text-muted-foreground border-border'
+}
+
+/** Milliseconds remaining in the guarantee window. Negative when elapsed. */
+export function guaranteeRemainingMs(state: PaymentState): number {
+  if (!state?.payment_hold_until) return 0
+  if (state.payment_status === 'disputed') return 0 // frozen
+  const ts = new Date(state.payment_hold_until).getTime()
+  if (isNaN(ts)) return 0
+  return ts - Date.now()
+}
+
+/** Human-readable "Xd Yh Zm" countdown for the guarantee window. */
+export function formatGuaranteeCountdown(ms: number): string {
+  if (ms <= 0) return '0 dias'
+  const totalMin = Math.floor(ms / 60000)
+  const days = Math.floor(totalMin / (60 * 24))
+  const hours = Math.floor((totalMin % (60 * 24)) / 60)
+  const minutes = totalMin % 60
+  if (days > 0) return `${days}d ${hours}h`
+  if (hours > 0) return `${hours}h ${minutes}m`
+  return `${minutes}min`
 }

@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
-import { Loader2, CreditCard, ShieldCheck } from 'lucide-react'
+import { Loader2, CreditCard, ShieldCheck, Lock, Clock } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import {
   getCheckoutPreview,
@@ -16,27 +16,28 @@ import {
 import type { PlatformSettings } from '@/services/settings'
 
 export interface CheckoutProps {
-  /** Total amount to charge the customer (in BRL). */
+  /** Total amount to pre-authorize on the customer's card (in BRL). */
   amount: number
   /** Connected account id of the professional who receives the split. */
   proAccountId: string
   /** Optional job/service description sent to the gateway. */
   description?: string
-  /** Called after a successful (or demo) split payment creation. */
+  /** Optional job id — persisted on the payment record for tracking. */
+  jobId?: string
+  /** Called after a successful (or demo) pre-authorization. */
   onPaid?: (result: any) => void
 }
 
 /**
- * Reusable checkout interface with platform-fee split.
+ * Reusable checkout interface with manual-capture (escrow) pre-authorization.
  *
- * - Fetches the gateway public key from the backend (server-side secret).
- * - Shows a live preview of the split (platform fee vs. professional amount)
- *   computed from the `settings` collection.
- * - Calls the backend `create-split` endpoint which creates the real charge
- *   using the configured gateway (Stripe / Mercado Pago), or returns a demo
- *   split when no live gateway is configured.
+ * The full amount is pre-authorized on the customer's card when the
+ * professional accepts the request — it is NOT captured immediately. The
+ * capture + platform-fee split happens only after a 7-day guarantee window
+ * following service completion. If the pro never clocks in within 24h, the
+ * authorization is cancelled automatically (auto-refund).
  */
-export function Checkout({ amount, proAccountId, description, onPaid }: CheckoutProps) {
+export function Checkout({ amount, proAccountId, description, jobId, onPaid }: CheckoutProps) {
   const { toast } = useToast()
   const [config, setConfig] = useState<PaymentConfig | null>(null)
   const [split, setSplit] = useState<PaymentSplit | null>(null)
@@ -67,19 +68,20 @@ export function Checkout({ amount, proAccountId, description, onPaid }: Checkout
         amount,
         proAccountId,
         description,
+        jobId,
       })
       if (result?.ok || result?.id || result?.split) {
         toast({
-          title: 'Pagamento processado',
+          title: 'Pagamento pré-autorizado',
           description: result?.demo
-            ? 'Pagamento simulado (modo demo) — split calculado com sucesso.'
-            : 'Cobrança criada e split aplicado.',
+            ? 'Pré-autorização simulada (modo demo). A cobrança ocorre após a garantia de 7 dias.'
+            : 'Valor pré-autorizado no cartão. A cobrança ocorre 7 dias após a conclusão do serviço.',
         })
         onPaid?.(result)
       } else {
         toast({
           title: 'Erro no pagamento',
-          description: result?.error || 'Não foi possível processar o pagamento.',
+          description: result?.error || 'Não foi possível pré-autorizar o pagamento.',
           variant: 'destructive',
         })
       }
@@ -109,6 +111,8 @@ export function Checkout({ amount, proAccountId, description, onPaid }: Checkout
         ? 'Mercado Pago'
         : 'Modo demo'
 
+  const guaranteeDays = settings?.guarantee_period_days ?? 7
+
   return (
     <Card className="w-full max-w-md mx-auto">
       <CardHeader>
@@ -118,16 +122,28 @@ export function Checkout({ amount, proAccountId, description, onPaid }: Checkout
         <CardDescription className="flex items-center gap-2">
           <Badge variant="secondary">{providerLabel}</Badge>
           <span className="flex items-center gap-1 text-xs text-muted-foreground">
-            <ShieldCheck className="h-3 w-3" /> Split automático
+            <ShieldCheck className="h-3 w-3" /> Pagamento com garantia
           </span>
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
+        {/* Escrow notice */}
+        <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900 flex gap-2">
+          <Lock className="h-4 w-4 mt-0.5 shrink-0" />
+          <div>
+            <strong>Pré-autorização (escrow).</strong> O valor é reservado no seu cartão,{' '}
+            <strong>não cobrado imediatamente</strong>. A cobrança só acontece {guaranteeDays} dias
+            após a conclusão do serviço. Se o profissional não iniciar o atendimento em{' '}
+            {settings?.clock_in_deadline_hours ?? 24}h, a pré-autorização é cancelada
+            automaticamente.
+          </div>
+        </div>
+
         {/* Split summary */}
         {split && (
           <div className="rounded-lg border bg-muted/30 p-4 space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Total</span>
+              <span className="text-muted-foreground">Total pré-autorizado</span>
               <span className="font-bold">
                 R$ {split.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
               </span>
@@ -200,15 +216,19 @@ export function Checkout({ amount, proAccountId, description, onPaid }: Checkout
         <Button className="w-full h-12 text-base" onClick={handlePay} disabled={paying}>
           {paying ? (
             <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Processando...
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Pré-autorizando...
             </>
           ) : (
-            <>Pagar R$ {amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</>
+            <>
+              <Lock className="h-4 w-4 mr-2" /> Pré-autorizar R${' '}
+              {amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </>
           )}
         </Button>
 
-        <p className="text-xs text-center text-muted-foreground">
-          Pagamento processado com segurança. A plataforma retém apenas a taxa de serviço.
+        <p className="text-xs text-center text-muted-foreground flex items-center justify-center gap-1">
+          <Clock className="h-3 w-3" /> Cobrança efetivada apenas após {guaranteeDays} dias de
+          garantia. A plataforma retém a taxa de serviço na captura.
         </p>
       </CardContent>
     </Card>

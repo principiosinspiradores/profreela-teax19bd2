@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
-import { MapPin, Navigation, Clock, AlertCircle } from 'lucide-react'
+import { MapPin, Navigation, Clock, AlertCircle, Wallet } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import {
   Dialog,
   DialogContent,
@@ -19,29 +20,61 @@ import { useAuth } from '@/hooks/use-auth'
 import { getProJobs, updateJob, getUserDocuments, createDocument } from '@/services/api'
 import { useRealtime } from '@/hooks/use-realtime'
 import { useToast } from '@/hooks/use-toast'
+import { PaymentStatusBadge } from '@/components/PaymentStatusBadge'
+import {
+  cancelAuthorization,
+  guaranteeRemainingMs,
+  formatGuaranteeCountdown,
+  type PaymentState,
+} from '@/services/checkout'
 
 export default function ProDashboard() {
   const [isOnline, setIsOnline] = useState(false)
   const [pendingJob, setPendingJob] = useState<any>(null)
   const [documents, setDocuments] = useState<any[]>([])
   const [uploading, setUploading] = useState(false)
-
-  const navigate = useNavigate()
-  const { user } = useAuth()
-  const { toast } = useToast()
+  const [completedJobs, setCompletedJobs] = useState<any[]>([])
 
   const loadData = async () => {
     if (!user) return
     const docs = await getUserDocuments(user.id)
     setDocuments(docs)
 
-    if (!isOnline) return
     const jobs = await getProJobs(user.id)
     const pending = jobs.find((j) => j.status === 'pending')
     if (pending && pending.id !== pendingJob?.id) {
       setPendingJob(pending)
     }
+    setCompletedJobs(
+      jobs.filter(
+        (j) =>
+          j.pro_id === user.id &&
+          ['completed'].includes(j.status) &&
+          ['held', 'disputed', 'authorized'].includes(j.payment_status || ''),
+      ),
+    )
   }
+
+  // tick for live countdown
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => setTick((t) => t + 1), 60000)
+    return () => clearInterval(id)
+  }, [])
+
+  const handleCancelMissed = async (jobId: string) => {
+    try {
+      await cancelAuthorization(jobId)
+      toast({ title: 'Pré-autorização cancelada', description: 'O serviço foi cancelado.' })
+      loadData()
+    } catch {
+      toast({ title: 'Erro', description: 'Não foi possível cancelar.', variant: 'destructive' })
+    }
+  }
+
+  const navigate = useNavigate()
+  const { user } = useAuth()
+  const { toast } = useToast()
 
   useEffect(() => {
     loadData()
@@ -72,7 +105,11 @@ export default function ProDashboard() {
   const acceptJob = async () => {
     if (!pendingJob) return
     try {
-      await updateJob(pendingJob.id, { status: 'accepted', pro_id: user?.id })
+      await updateJob(pendingJob.id, {
+        status: 'accepted',
+        pro_id: user?.id,
+        accepted_at: new Date().toISOString(),
+      })
       setPendingJob(null)
       navigate(`/pro/job/${pendingJob.id}`)
     } catch {
@@ -163,7 +200,47 @@ export default function ProDashboard() {
       </div>
 
       {/* Bottom Info Card */}
-      <div className="relative z-10 mt-auto m-4">
+      <div className="relative z-10 mt-auto m-4 space-y-3">
+        {completedJobs.length > 0 && (
+          <Card className="shadow-xl border-white/50 bg-white/95 backdrop-blur">
+            <CardContent className="p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <Wallet className="h-4 w-4 text-primary" />
+                <p className="font-semibold text-sm">Pagamentos em garantia</p>
+              </div>
+              {completedJobs.map((job) => {
+                const remaining = guaranteeRemainingMs(job as PaymentState)
+                return (
+                  <div
+                    key={job.id}
+                    className="flex flex-wrap items-center justify-between gap-2 border-t pt-2"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">
+                        {job.expand?.service_id?.name || 'Serviço'}
+                      </p>
+                      <PaymentStatusBadge state={job as PaymentState} />
+                    </div>
+                    <div className="text-right">
+                      {job.payment_status === 'held' && remaining > 0 ? (
+                        <p className="text-xs text-amber-700">
+                          Seu pagamento será liberado em{' '}
+                          <strong>{formatGuaranteeCountdown(remaining)}</strong>
+                        </p>
+                      ) : job.payment_status === 'held' ? (
+                        <p className="text-xs text-green-700">Pronto para captura</p>
+                      ) : job.payment_status === 'disputed' ? (
+                        <p className="text-xs text-red-700">Liberação pausada (disputa)</p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">Aguardando liberação</p>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </CardContent>
+          </Card>
+        )}
         <Card className="shadow-xl border-white/50 bg-white/95 backdrop-blur">
           <CardContent className="p-6 flex items-center justify-between">
             <div>

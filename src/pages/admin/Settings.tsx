@@ -6,7 +6,15 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Separator } from '@/components/ui/separator'
 import { useToast } from '@/hooks/use-toast'
-import { Loader2, Save, Percent, Clock, ToggleLeft, SlidersHorizontal } from 'lucide-react'
+import {
+  Loader2,
+  Save,
+  Percent,
+  Clock,
+  ToggleLeft,
+  SlidersHorizontal,
+  ShieldCheck,
+} from 'lucide-react'
 import {
   getSettings,
   updateSettings,
@@ -57,6 +65,8 @@ export default function AdminSettings() {
         module_reviews_enabled: settings.module_reviews_enabled,
         module_referrals_enabled: settings.module_referrals_enabled,
         module_dynamic_pricing_enabled: settings.module_dynamic_pricing_enabled,
+        guarantee_period_days: settings.guarantee_period_days,
+        clock_in_deadline_hours: settings.clock_in_deadline_hours,
       })
       setSettings(updated)
       toast({
@@ -227,6 +237,50 @@ export default function AdminSettings() {
                 Valor cobrado por hora trabalhada para precificação base da mão de obra.
               </p>
             </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Escrow / guarantee */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ShieldCheck className="h-5 w-5 text-primary" /> Pagamento com Garantia (Escrow)
+          </CardTitle>
+          <CardDescription>
+            Configure o fluxo de pré-autorização (captura diferida) e o período de garantia.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-6 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="guarantee_days">Período de garantia (dias)</Label>
+            <Input
+              id="guarantee_days"
+              type="number"
+              step="1"
+              min="0"
+              value={settings.guarantee_period_days}
+              onChange={(e) => handleNumberChange('guarantee_period_days', e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Tempo que o pagamento fica retido após a conclusão do serviço antes da captura
+              definitiva. Padrão: 7 dias.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="clock_in_hours">Prazo para clock-in (horas)</Label>
+            <Input
+              id="clock_in_hours"
+              type="number"
+              step="1"
+              min="1"
+              value={settings.clock_in_deadline_hours}
+              onChange={(e) => handleNumberChange('clock_in_deadline_hours', e.target.value)}
+            />
+            <p className="text-xs text-muted-foreground">
+              Após esse prazo sem clock-in do profissional, a pré-autorização é cancelada
+              automaticamente. Padrão: 24h.
+            </p>
           </div>
         </CardContent>
       </Card>

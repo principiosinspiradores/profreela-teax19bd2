@@ -13,6 +13,7 @@ import { Download, Star } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { getClientJobs } from '@/services/api'
 import { format } from 'date-fns'
+import { PaymentStatusBadge } from '@/components/PaymentStatusBadge'
 
 export default function ClientHistory() {
   const { user } = useAuth()
@@ -44,6 +45,7 @@ export default function ClientHistory() {
               <TableHead>Serviço</TableHead>
               <TableHead>Profissional</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Pagamento</TableHead>
               <TableHead className="text-right">Valor</TableHead>
               <TableHead className="text-center">Ações</TableHead>
             </TableRow>
@@ -74,6 +76,9 @@ export default function ClientHistory() {
                     </Badge>
                   )}
                 </TableCell>
+                <TableCell>
+                  <PaymentStatusBadge state={job} />
+                </TableCell>
                 <TableCell className="text-right">R$ {job.price.toFixed(2)}</TableCell>
                 <TableCell className="text-center">
                   <Button
@@ -89,7 +94,7 @@ export default function ClientHistory() {
             ))}
             {jobs.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7} className="text-center text-muted-foreground">
+                <TableCell colSpan={8} className="text-center text-muted-foreground">
                   Nenhum histórico encontrado.
                 </TableCell>
               </TableRow>
