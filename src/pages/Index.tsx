@@ -69,8 +69,8 @@ export default function Index() {
             <div className="relative animate-slide-up hidden lg:block">
               <div className="absolute inset-0 bg-gradient-to-tr from-primary/20 to-transparent rounded-3xl transform rotate-3 scale-105" />
               <img
-                src="https://img.usecurling.com/p/600/400?q=cleaner%20hotel&color=blue"
-                alt="Profissional trabalhando"
+                src="https://img.usecurling.com/p/600/400?q=janitor"
+                alt="Profissional de facilities em ambiente corporativo"
                 className="relative rounded-3xl shadow-2xl object-cover border-4 border-white"
               />
               {/* Floating Badge */}

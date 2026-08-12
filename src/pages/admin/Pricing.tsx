@@ -4,15 +4,56 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
-import { Loader2, Save, SlidersHorizontal, Wrench, TrendingUp, Gauge } from 'lucide-react'
+import {
+  Loader2,
+  Save,
+  SlidersHorizontal,
+  Wrench,
+  TrendingUp,
+  Gauge,
+  Plus,
+  Trash2,
+} from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import {
   getSettings,
   updateSettings,
   DEFAULT_SETTINGS,
   type PlatformSettings,
 } from '@/services/settings'
-import { getServices, updateService } from '@/services/api'
+import { getServices, updateService, createService, deleteService } from '@/services/api'
+
+interface ServiceForm {
+  name: string
+  description: string
+  base_price: string
+  icon: string
+}
+
+const EMPTY_FORM: ServiceForm = {
+  name: '',
+  description: '',
+  base_price: '',
+  icon: '',
+}
 
 export default function AdminPricing() {
   const { toast } = useToast()
@@ -21,6 +62,15 @@ export default function AdminPricing() {
   const [loading, setLoading] = useState(true)
   const [savingServices, setSavingServices] = useState(false)
   const [savingSettings, setSavingSettings] = useState(false)
+
+  // Create-service dialog state
+  const [createOpen, setCreateOpen] = useState(false)
+  const [creating, setCreating] = useState(false)
+  const [form, setForm] = useState<ServiceForm>(EMPTY_FORM)
+
+  // Delete-service confirmation state
+  const [deleteTarget, setDeleteTarget] = useState<any | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   useEffect(() => {
     Promise.all([getSettings(), getServices()])
@@ -95,6 +145,78 @@ export default function AdminPricing() {
     }
   }
 
+  const openCreate = () => {
+    setForm(EMPTY_FORM)
+    setCreateOpen(true)
+  }
+
+  const handleCreate = async () => {
+    const name = form.name.trim()
+    if (!name) {
+      toast({
+        title: 'Nome obrigatório',
+        description: 'Informe o nome do serviço.',
+        variant: 'destructive',
+      })
+      return
+    }
+    const priceNum = form.base_price === '' ? 0 : parseFloat(form.base_price)
+    if (isNaN(priceNum) || priceNum < 0) {
+      toast({
+        title: 'Preço inválido',
+        description: 'Informe um preço base válido.',
+        variant: 'destructive',
+      })
+      return
+    }
+    setCreating(true)
+    try {
+      const created = await createService({
+        name,
+        description: form.description.trim(),
+        base_price: priceNum,
+        icon: form.icon.trim(),
+      })
+      setServices((prev) => [...prev, created])
+      setCreateOpen(false)
+      setForm(EMPTY_FORM)
+      toast({
+        title: 'Serviço criado',
+        description: `“${name}” foi adicionado à lista de serviços.`,
+      })
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao criar serviço',
+        description: err?.message || 'Não foi possível criar o serviço.',
+        variant: 'destructive',
+      })
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return
+    setDeleting(true)
+    try {
+      await deleteService(deleteTarget.id)
+      setServices((prev) => prev.filter((s) => s.id !== deleteTarget.id))
+      toast({
+        title: 'Serviço removido',
+        description: `“${deleteTarget.name}” foi excluído.`,
+      })
+      setDeleteTarget(null)
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao excluir serviço',
+        description: err?.message || 'Não foi possível excluir o serviço.',
+        variant: 'destructive',
+      })
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20 text-muted-foreground">
@@ -115,12 +237,19 @@ export default function AdminPricing() {
       {/* Base price per service */}
       <Card>
         <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Wrench className="h-5 w-5 text-primary" /> Preço Base por Hora (R$)
-          </CardTitle>
-          <CardDescription>
-            Valor cobrado por hora trabalhada para cada tipo de serviço.
-          </CardDescription>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Wrench className="h-5 w-5 text-primary" /> Preço Base por Hora (R$)
+              </CardTitle>
+              <CardDescription className="mt-1.5">
+                Valor cobrado por hora trabalhada para cada tipo de serviço.
+              </CardDescription>
+            </div>
+            <Button onClick={openCreate} size="sm" className="shrink-0">
+              <Plus className="h-4 w-4 mr-1" /> Adicionar Serviço
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="space-y-4">
           {services.length === 0 ? (
@@ -128,8 +257,24 @@ export default function AdminPricing() {
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
               {services.map((s) => (
-                <div key={s.id} className="space-y-2">
-                  <Label htmlFor={`svc_${s.id}`}>{s.name}</Label>
+                <div key={s.id} className="space-y-2 rounded-lg border p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      {s.icon && <span className="text-lg leading-none">{s.icon}</span>}
+                      <Label htmlFor={`svc_${s.id}`} className="truncate font-medium">
+                        {s.name}
+                      </Label>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
+                      onClick={() => setDeleteTarget(s)}
+                      aria-label={`Excluir ${s.name}`}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                   <Input
                     id={`svc_${s.id}`}
                     type="number"
@@ -268,6 +413,109 @@ export default function AdminPricing() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Create service dialog */}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Plus className="h-5 w-5 text-primary" /> Adicionar Serviço
+            </DialogTitle>
+            <DialogDescription>
+              Cadastre um novo tipo de serviço oferecido pela plataforma.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="svc_name">Nome *</Label>
+              <Input
+                id="svc_name"
+                placeholder="Ex.: Faxineira"
+                value={form.name}
+                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="svc_desc">Descrição</Label>
+              <Input
+                id="svc_desc"
+                placeholder="Breve descrição do serviço"
+                value={form.description}
+                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="svc_price">Preço base/hora (R$) *</Label>
+                <Input
+                  id="svc_price"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="25.00"
+                  value={form.base_price}
+                  onChange={(e) => setForm((f) => ({ ...f, base_price: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="svc_icon">Ícone (opcional)</Label>
+                <Input
+                  id="svc_icon"
+                  placeholder="🧹 ou nome do ícone"
+                  value={form.icon}
+                  onChange={(e) => setForm((f) => ({ ...f, icon: e.target.value }))}
+                />
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              O ícone pode ser um emoji ou o nome de um ícone do lucide-react.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={creating}>
+              Cancelar
+            </Button>
+            <Button onClick={handleCreate} disabled={creating}>
+              {creating ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Criando...
+                </>
+              ) : (
+                'Criar serviço'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirmation */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir serviço</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir o serviço <strong>{deleteTarget?.name}</strong>? Esta
+              ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              disabled={deleting}
+              className="bg-destructive text-white hover:bg-destructive/90"
+            >
+              {deleting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Excluindo...
+                </>
+              ) : (
+                'Excluir'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

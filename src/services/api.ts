@@ -1,6 +1,8 @@
 import pb from '@/lib/pocketbase/client'
 
 export const getServices = () => pb.collection('services').getFullList()
+export const createService = (data: any) => pb.collection('services').create(data)
+export const deleteService = (id: string) => pb.collection('services').delete(id)
 export const getJobs = () =>
   pb.collection('jobs').getFullList({ expand: 'service_id,pro_id,customer_id', sort: '-created' })
 export const getProJobs = (proId: string) =>

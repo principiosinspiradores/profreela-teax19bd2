@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/sidebar'
 import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
+import { getAvatarUrl } from '@/lib/avatar'
 
 export function AppSidebar() {
   const { role, signOut, user } = useAuth()
@@ -75,7 +76,11 @@ export function AppSidebar() {
       </SidebarContent>
       <SidebarFooter className="p-4 border-t">
         <div className="flex items-center gap-3 mb-4">
-          <img src={user?.avatar} alt="Avatar" className="w-10 h-10 rounded-full border bg-muted" />
+          <img
+            src={getAvatarUrl(user, 128)}
+            alt="Avatar"
+            className="w-10 h-10 rounded-full border bg-muted object-cover"
+          />
           <div className="flex flex-col">
             <span className="text-sm font-semibold">{user?.name}</span>
             <span className="text-xs text-muted-foreground capitalize">{role}</span>

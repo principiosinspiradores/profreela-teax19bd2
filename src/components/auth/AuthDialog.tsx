@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Dialog,
@@ -14,8 +14,9 @@ import { useAuth, type Role } from '@/hooks/use-auth'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useToast } from '@/hooks/use-toast'
 import { getErrorMessage, extractFieldErrors, type FieldErrors } from '@/lib/pocketbase/errors'
-import { Briefcase } from 'lucide-react'
+import { Briefcase, Camera, Upload, User } from 'lucide-react'
 import pb from '@/lib/pocketbase/client'
+import { getAvatarUrl } from '@/lib/avatar'
 
 interface AuthDialogProps {
   open: boolean
@@ -29,8 +30,12 @@ export function AuthDialog({ open, onOpenChange, initialRole = 'client' }: AuthD
   const { signIn, signUp } = useAuth()
   const navigate = useNavigate()
   const { toast } = useToast()
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
+
+  const [avatarFile, setAvatarFile] = useState<File | null>(null)
+  const [avatarPreview, setAvatarPreview] = useState<string>('')
 
   const [formData, setFormData] = useState({
     name: '',
@@ -38,6 +43,48 @@ export function AuthDialog({ open, onOpenChange, initialRole = 'client' }: AuthD
     password: '',
     termsAccepted: false,
   })
+
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      toast({
+        title: 'Arquivo inválido',
+        description: 'Selecione um arquivo de imagem (JPG, PNG, etc.).',
+        variant: 'destructive',
+      })
+      return
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: 'Arquivo muito grande',
+        description: 'A imagem deve ter no máximo 5MB.',
+        variant: 'destructive',
+      })
+      return
+    }
+    setAvatarFile(file)
+    setAvatarPreview(URL.createObjectURL(file))
+  }
+
+  const clearAvatar = () => {
+    setAvatarFile(null)
+    if (avatarPreview) URL.revokeObjectURL(avatarPreview)
+    setAvatarPreview('')
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  // Reset avatar state whenever the dialog toggles between login/signup or
+  // closes, so stale previews don't leak across sessions.
+  const handleModeSwitch = () => {
+    clearAvatar()
+    setIsLogin(!isLogin)
+  }
+
+  const handleClose = (open: boolean) => {
+    if (!open) clearAvatar()
+    onOpenChange(open)
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -65,6 +112,7 @@ export function AuthDialog({ open, onOpenChange, initialRole = 'client' }: AuthD
           role: initialRole,
           terms_accepted: formData.termsAccepted,
           status: initialRole === 'pro' ? 'pending' : 'active',
+          avatar: initialRole === 'pro' ? avatarFile : undefined,
         })
       }
 
@@ -76,7 +124,7 @@ export function AuthDialog({ open, onOpenChange, initialRole = 'client' }: AuthD
           variant: 'destructive',
         })
       } else {
-        onOpenChange(false)
+        handleClose(false)
         // Redirect based on the user's ACTUAL role, not the selected dialog role.
         // This ensures an admin who logs in via the client/pro dialog still
         // lands on /admin, a pro lands on /pro, etc.
@@ -92,7 +140,7 @@ export function AuthDialog({ open, onOpenChange, initialRole = 'client' }: AuthD
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <div className="mx-auto bg-primary/10 w-12 h-12 rounded-full flex items-center justify-center mb-4">
@@ -119,6 +167,68 @@ export function AuthDialog({ open, onOpenChange, initialRole = 'client' }: AuthD
               />
             </div>
           )}
+
+          {/* Avatar upload — only for pros during signup */}
+          {!isLogin && initialRole === 'pro' && (
+            <div className="space-y-2">
+              <Label htmlFor="avatar">Foto de perfil (opcional)</Label>
+              <div className="flex items-center gap-4">
+                <div className="relative">
+                  {avatarPreview ? (
+                    <img
+                      src={avatarPreview}
+                      alt="Pré-visualização do avatar"
+                      className="w-16 h-16 rounded-full object-cover border-2 border-primary/30"
+                    />
+                  ) : (
+                    <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center border-2 border-dashed border-muted-foreground/30">
+                      <User className="h-7 w-7 text-muted-foreground" />
+                    </div>
+                  )}
+                  {avatarPreview && (
+                    <button
+                      type="button"
+                      onClick={clearAvatar}
+                      className="absolute -top-1 -right-1 bg-destructive text-white rounded-full w-5 h-5 flex items-center justify-center text-xs shadow hover:bg-destructive/90"
+                      aria-label="Remover foto"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+                <div className="flex-1">
+                  <input
+                    ref={fileInputRef}
+                    id="avatar"
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleAvatarChange}
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    {avatarPreview ? (
+                      <>
+                        <Camera className="h-4 w-4 mr-2" /> Trocar foto
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="h-4 w-4 mr-2" /> Enviar foto
+                      </>
+                    )}
+                  </Button>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    JPG ou PNG até 5MB. Os clientes verão sua foto ao contratar.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="space-y-2">
             <Label htmlFor="email">Email</Label>
             <Input
@@ -166,7 +276,7 @@ export function AuthDialog({ open, onOpenChange, initialRole = 'client' }: AuthD
             {isLogin ? 'Não tem uma conta? ' : 'Já possui conta? '}
             <button
               type="button"
-              onClick={() => setIsLogin(!isLogin)}
+              onClick={handleModeSwitch}
               className="text-primary hover:underline font-medium"
             >
               {isLogin ? 'Cadastre-se' : 'Faça login'}

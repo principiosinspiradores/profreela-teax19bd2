@@ -42,16 +42,34 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       //   - `emailVisibility` is set so the email is always returned on the
       //     record (the app reads user.email in several places)
       //   - `role` is required on the users collection
-      await pb.collection('users').create({
-        email: data.email,
-        password: data.password,
-        passwordConfirm: data.password,
-        name: data.name,
-        role: data.role,
-        status: data.status,
-        terms_accepted: data.terms_accepted,
-        emailVisibility: true,
-      })
+      //
+      // When an avatar File is provided (e.g. for pros), we send the request
+      // as multipart/form-data so PocketBase stores the file in the `avatar`
+      // field. Otherwise we send a plain JSON object.
+      if (data.avatar instanceof File) {
+        const formData = new FormData()
+        formData.append('email', data.email)
+        formData.append('password', data.password)
+        formData.append('passwordConfirm', data.password)
+        formData.append('name', data.name)
+        formData.append('role', data.role)
+        formData.append('status', data.status)
+        formData.append('terms_accepted', String(!!data.terms_accepted))
+        formData.append('emailVisibility', 'true')
+        formData.append('avatar', data.avatar)
+        await pb.collection('users').create(formData)
+      } else {
+        await pb.collection('users').create({
+          email: data.email,
+          password: data.password,
+          passwordConfirm: data.password,
+          name: data.name,
+          role: data.role,
+          status: data.status,
+          terms_accepted: data.terms_accepted,
+          emailVisibility: true,
+        })
+      }
       await pb.collection('users').authWithPassword(data.email, data.password)
       return { error: null }
     } catch (error) {

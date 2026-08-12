@@ -18,6 +18,7 @@ import { useAuth } from '@/hooks/use-auth'
 import { getClientJobs, getBanners, getNearbyPros, updateJob } from '@/services/api'
 import { useRealtime } from '@/hooks/use-realtime'
 import { useToast } from '@/hooks/use-toast'
+import { getAvatarUrl } from '@/lib/avatar'
 
 export default function ClientDashboard() {
   const { user } = useAuth()
@@ -137,10 +138,7 @@ export default function ClientDashboard() {
                   {pro.name?.split(' ')[0] || 'Pro'}
                 </div>
                 <div className="w-8 h-8 rounded-full border-2 border-primary overflow-hidden shadow-lg bg-white">
-                  <img
-                    src={pro.avatar || `https://img.usecurling.com/ppl/thumbnail?seed=${pro.id}`}
-                    className="w-full h-full object-cover"
-                  />
+                  <img src={getAvatarUrl(pro, 128)} className="w-full h-full object-cover" />
                 </div>
                 <div className="w-2 h-2 bg-primary transform rotate-45 -mt-1 shadow-lg" />
               </div>
@@ -187,10 +185,7 @@ export default function ClientDashboard() {
                     {job.expand?.pro_id && (
                       <div className="flex items-center gap-3 mt-4 pt-4 border-t">
                         <img
-                          src={
-                            job.expand.pro_id.avatar ||
-                            `https://img.usecurling.com/ppl/thumbnail?gender=female&seed=${job.id}`
-                          }
+                          src={getAvatarUrl(job.expand.pro_id, 128)}
                           className="w-8 h-8 rounded-full"
                           alt="Pro"
                         />
