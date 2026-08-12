@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-12T21:07:31.683Z",
+  "generatedAt": "2026-08-12T21:32:00.633Z",
   "collections": [
     {
       "name": "users",
@@ -229,6 +229,61 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "payment_status",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["authorized", "held", "released", "captured", "disputed", "cancelled"]
+        },
+        {
+          "name": "payment_intent_id",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "payment_authorized_at",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "payment_hold_until",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "payment_released_at",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "payment_disputed_at",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "dispute_reason",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "clocked_in_at",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "accepted_at",
+          "type": "date",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": []
@@ -747,6 +802,18 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "guarantee_period_days",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "clock_in_deadline_hours",
+          "type": "number",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": []
