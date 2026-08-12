@@ -1,26 +1,44 @@
 import pb from '@/lib/pocketbase/client'
-
-/**
- * Shared headers for admin-only service mutations.
- *
- * The PocketBase JS SDK normally injects the auth token from `pb.authStore`
- * automatically, but we set it explicitly here so the request is robust even
- * if a caller passes a custom fetch config or the store was hydrated late.
- * `requestKey` disables auto-cancellation (autoCancellation is already off
- * globally) and guarantees each mutation is independent.
- */
-const adminHeaders = (): Record<string, string> => {
-  const token = pb.authStore.token
-  return token ? { Authorization: `Bearer ${token}` } : {}
-}
+import { getErrorMessage } from '@/lib/pocketbase/errors'
 
 export const getServices = () => pb.collection('services').getFullList()
-export const createService = (data: any) =>
-  pb.collection('services').create(data, { headers: adminHeaders() })
-export const updateService = (id: string, data: any) =>
-  pb.collection('services').update(id, data, { headers: adminHeaders() })
-export const deleteService = (id: string) =>
-  pb.collection('services').delete(id, { headers: adminHeaders() })
+
+/**
+ * Create a new service (admin only).
+ *
+ * The PocketBase JS SDK injects the auth token from `pb.authStore`
+ * automatically — we do NOT pass custom headers, because in SDK v0.26.x the
+ * second argument of `.create()` is treated as `SendOptions` and custom
+ * headers passed there can produce a malformed multipart payload that the
+ * server rejects with HTTP 400. Letting the SDK manage the token keeps
+ * create and update behaviour identical.
+ */
+export const createService = async (data: any) => {
+  try {
+    return await pb.collection('services').create(data)
+  } catch (err) {
+    console.error('[createService] failed:', err)
+    throw err
+  }
+}
+
+export const updateService = async (id: string, data: any) => {
+  try {
+    return await pb.collection('services').update(id, data)
+  } catch (err) {
+    console.error('[updateService] failed:', err)
+    throw err
+  }
+}
+
+export const deleteService = async (id: string) => {
+  try {
+    return await pb.collection('services').delete(id)
+  } catch (err) {
+    console.error('[deleteService] failed:', err)
+    throw err
+  }
+}
 export const getJobs = () =>
   pb.collection('jobs').getFullList({ expand: 'service_id,pro_id,customer_id', sort: '-created' })
 export const getProJobs = (proId: string) =>
