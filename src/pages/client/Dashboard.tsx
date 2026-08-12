@@ -215,14 +215,16 @@ export default function ClientDashboard() {
                         <PaymentStatusBadge state={job as PaymentState} />
                       </div>
                     )}
-                    {job.expand?.pro_id && (
+                    {(job.expand?.pro_id || job.pro_id) && (
                       <div className="flex items-center gap-3 mt-4 pt-4 border-t">
                         <img
-                          src={getAvatarUrl(job.expand.pro_id, 128)}
+                          src={getAvatarUrl(job.expand?.pro_id || { id: job.pro_id }, 128)}
                           className="w-8 h-8 rounded-full"
                           alt="Pro"
                         />
-                        <span className="text-sm font-medium">{job.expand.pro_id.name}</span>
+                        <span className="text-sm font-medium">
+                          {job.expand?.pro_id?.name || 'Profissional'}
+                        </span>
                         {job.status === 'accepted' ? (
                           <Button
                             size="sm"
@@ -247,6 +249,18 @@ export default function ClientDashboard() {
                             </Button>
                           </div>
                         )}
+                      </div>
+                    )}
+                    {/* Fallback: payment button when accepted even if pro expand is missing */}
+                    {job.status === 'accepted' && !job.expand?.pro_id && !job.pro_id && (
+                      <div className="flex items-center justify-end gap-2 mt-4 pt-4 border-t">
+                        <Button
+                          size="sm"
+                          className="bg-green-600 hover:bg-green-700 text-white"
+                          onClick={() => setPaymentJob(job)}
+                        >
+                          Pré-autorizar
+                        </Button>
                       </div>
                     )}
                     {job.payment_status === 'held' && (

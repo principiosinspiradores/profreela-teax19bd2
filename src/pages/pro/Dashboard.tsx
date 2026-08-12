@@ -275,6 +275,13 @@ export default function ProDashboard() {
               </span>
             </div>
 
+            {pendingJob?.hours ? (
+              <div className="flex justify-between items-center text-sm px-1">
+                <span className="text-muted-foreground">Duração estimada</span>
+                <span className="font-medium">{pendingJob.hours}h</span>
+              </div>
+            ) : null}
+
             <div className="grid gap-3 text-sm">
               <div className="flex items-center gap-3">
                 <MapPin className="h-5 w-5 text-muted-foreground" />

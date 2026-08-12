@@ -44,10 +44,11 @@ export default function ClientHistory() {
               <TableHead>Data</TableHead>
               <TableHead>Serviço</TableHead>
               <TableHead>Profissional</TableHead>
+              <TableHead>Horas</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Pagamento</TableHead>
               <TableHead className="text-right">Valor</TableHead>
-              <TableHead className="text-center">Ações</TableHead>
+              <TableHead className="text-center">Ações</TableHead>{' '}
             </TableRow>
           </TableHeader>
           <TableBody>

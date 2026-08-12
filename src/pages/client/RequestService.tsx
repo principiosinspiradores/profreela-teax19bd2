@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { MapPin, Calendar as CalendarIcon, Info, Zap } from 'lucide-react'
+import { MapPin, Calendar as CalendarIcon, Info, Zap, Clock } from 'lucide-react'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { Button } from '@/components/ui/button'
@@ -28,6 +28,7 @@ export default function RequestService() {
   const [services, setServices] = useState<any[]>([])
   const [selectedService, setSelectedService] = useState<string>('')
   const [address, setAddress] = useState('Av. Aquidabã, 400 - Centro, Campinas')
+  const [hours, setHours] = useState(1)
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
   const { toast } = useToast()
@@ -41,12 +42,17 @@ export default function RequestService() {
   const isEmergency = type === 'emergency'
   const basePrice = activeService ? activeService.base_price : 0
 
+  // The base price is the per-hour rate. The client selects how many hours of
+  // service they need; the labour cost scales linearly with that.
+  const safeHours = Math.max(1, Math.min(12, Number(hours) || 1))
+  const labourCost = basePrice * safeHours
+
   // Mock distance calculation (e.g. 5km)
   const distanceKm = 5.2
   const distanceFee = distanceKm * 2.5 // R$ 2.50 per km
 
   const multiplier = isEmergency ? 1.2 : 1.0
-  const finalPrice = (basePrice + distanceFee) * multiplier
+  const finalPrice = (labourCost + distanceFee) * multiplier
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -59,6 +65,7 @@ export default function RequestService() {
         service_id: selectedService,
         status: 'pending',
         price: finalPrice,
+        hours: safeHours,
         type,
         address,
         latitude: -22.9099,
@@ -160,6 +167,28 @@ export default function RequestService() {
                   </RadioGroup>
                 </div>
 
+                <div className="space-y-2 pt-4 border-t">
+                  <Label>Horas Estimadas</Label>
+                  <div className="relative">
+                    <Clock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      type="number"
+                      min={1}
+                      max={12}
+                      step={1}
+                      className="pl-9"
+                      value={hours}
+                      onChange={(e) => {
+                        const v = parseInt(e.target.value, 10)
+                        setHours(Number.isNaN(v) ? 1 : v)
+                      }}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    De 1 a 12 horas. O preço final é proporcional às horas informadas.
+                  </p>
+                </div>
+
                 {!isEmergency && (
                   <div className="space-y-2 pt-4 border-t animate-fade-in">
                     <Label>Data do Serviço</Label>
@@ -197,8 +226,12 @@ export default function RequestService() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Diária Base</span>
+                  <span className="text-muted-foreground">Valor/hora</span>
                   <span>R$ {basePrice.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Mão de obra ({safeHours}h)</span>
+                  <span>R$ {labourCost.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Deslocamento ({distanceKm}km)</span>
@@ -209,7 +242,7 @@ export default function RequestService() {
                     <span className="flex items-center gap-1">
                       Taxa Emergência <Info className="h-3 w-3" />
                     </span>
-                    <span>+ R$ {(basePrice * 0.2).toFixed(2)}</span>
+                    <span>+ R$ {(labourCost * 0.2).toFixed(2)}</span>
                   </div>
                 )}
                 <div className="border-t pt-4 mt-2">
