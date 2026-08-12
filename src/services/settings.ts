@@ -26,6 +26,11 @@ export interface PlatformSettings {
   module_dynamic_pricing_enabled: boolean
   guarantee_period_days: number
   clock_in_deadline_hours: number
+  // --- Short-job dynamic pricing ----------------------------------------
+  min_hours: number
+  short_job_multiplier_4_5: number
+  short_job_multiplier_6_7: number
+  normal_hours_threshold: number
   updated?: string
 }
 
@@ -42,6 +47,10 @@ const DEFAULT_SETTINGS: PlatformSettings = {
   module_dynamic_pricing_enabled: true,
   guarantee_period_days: 7,
   clock_in_deadline_hours: 24,
+  min_hours: 4,
+  short_job_multiplier_4_5: 1.5,
+  short_job_multiplier_6_7: 1.3,
+  normal_hours_threshold: 8,
 }
 
 /** Fetch the current platform settings (public). Falls back to defaults. */

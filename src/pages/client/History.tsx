@@ -60,6 +60,7 @@ export default function ClientHistory() {
                 <TableCell>
                   <div className="flex items-center gap-2">{job.expand?.pro_id?.name || '-'}</div>
                 </TableCell>
+                <TableCell>{job.hours ? `${job.hours}h` : '-'}</TableCell>
                 <TableCell>
                   {job.status === 'completed' ? (
                     <Badge

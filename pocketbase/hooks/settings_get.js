@@ -31,6 +31,11 @@ routerAdd('GET', '/backend/v1/settings', (e) => {
       module_dynamic_pricing_enabled: record.getBool('module_dynamic_pricing_enabled'),
       guarantee_period_days: record.getFloat('guarantee_period_days') || 7,
       clock_in_deadline_hours: record.getFloat('clock_in_deadline_hours') || 24,
+      // --- Short-job dynamic pricing -------------------------------------
+      min_hours: record.getFloat('min_hours') || 4,
+      short_job_multiplier_4_5: record.getFloat('short_job_multiplier_4_5') || 1.5,
+      short_job_multiplier_6_7: record.getFloat('short_job_multiplier_6_7') || 1.3,
+      normal_hours_threshold: record.getFloat('normal_hours_threshold') || 8,
       updated: record.getString('updated'),
     },
   })

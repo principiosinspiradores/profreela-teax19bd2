@@ -18,6 +18,8 @@ import { useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/use-auth'
 import { getProJobs, updateJob, getUserDocuments, createDocument } from '@/services/api'
+import { getSettings, DEFAULT_SETTINGS, type PlatformSettings } from '@/services/settings'
+import { getHourMultiplier, shortJobBand } from '@/lib/pricing'
 import { useRealtime } from '@/hooks/use-realtime'
 import { useToast } from '@/hooks/use-toast'
 import { PaymentStatusBadge } from '@/components/PaymentStatusBadge'
@@ -34,9 +36,13 @@ export default function ProDashboard() {
   const [documents, setDocuments] = useState<any[]>([])
   const [uploading, setUploading] = useState(false)
   const [completedJobs, setCompletedJobs] = useState<any[]>([])
+  const [settings, setSettings] = useState<PlatformSettings>(DEFAULT_SETTINGS)
 
   const loadData = async () => {
     if (!user) return
+    getSettings()
+      .then(setSettings)
+      .catch(() => {})
     const docs = await getUserDocuments(user.id)
     setDocuments(docs)
 
@@ -276,10 +282,32 @@ export default function ProDashboard() {
             </div>
 
             {pendingJob?.hours ? (
-              <div className="flex justify-between items-center text-sm px-1">
-                <span className="text-muted-foreground">Duração estimada</span>
-                <span className="font-medium">{pendingJob.hours}h</span>
-              </div>
+              <>
+                <div className="flex justify-between items-center text-sm px-1">
+                  <span className="text-muted-foreground">Duração estimada</span>
+                  <span className="font-medium">{pendingJob.hours}h</span>
+                </div>
+                {(() => {
+                  const svcPrice = pendingJob?.expand?.service_id?.base_price
+                  const hrs = Number(pendingJob.hours) || 0
+                  const mult = getHourMultiplier(hrs, settings)
+                  const band = shortJobBand(hrs, settings)
+                  if (!svcPrice) return null
+                  return (
+                    <div className="flex justify-between items-center text-sm px-1">
+                      <span className="text-muted-foreground">
+                        Valor/hora efetivo{' '}
+                        {band && (
+                          <span className="text-amber-700 font-medium">
+                            (sobretaxa {mult.toFixed(2)}×)
+                          </span>
+                        )}
+                      </span>
+                      <span className="font-medium">R$ {(svcPrice * mult).toFixed(2)}/h</span>
+                    </div>
+                  )
+                })()}
+              </>
             ) : null}
 
             <div className="grid gap-3 text-sm">

@@ -20,6 +20,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
 import { getServices, createJob } from '@/services/api'
+import { getSettings, DEFAULT_SETTINGS, type PlatformSettings } from '@/services/settings'
+import { getHourMultiplier, shortJobBand } from '@/lib/pricing'
 import { useAuth } from '@/hooks/use-auth'
 
 export default function RequestService() {
@@ -28,31 +30,43 @@ export default function RequestService() {
   const [services, setServices] = useState<any[]>([])
   const [selectedService, setSelectedService] = useState<string>('')
   const [address, setAddress] = useState('Av. Aquidabã, 400 - Centro, Campinas')
-  const [hours, setHours] = useState(1)
+  const [hours, setHours] = useState(4)
+  const [settings, setSettings] = useState<PlatformSettings>(DEFAULT_SETTINGS)
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
   const { toast } = useToast()
   const { user } = useAuth()
 
   useEffect(() => {
+    getSettings()
+      .then(setSettings)
+      .catch(() => {})
     getServices().then(setServices)
   }, [])
+
+  const minHours = Math.max(1, Math.round(settings.min_hours || DEFAULT_SETTINGS.min_hours))
+  const maxHours = 12
 
   const activeService = services.find((s) => s.id === selectedService)
   const isEmergency = type === 'emergency'
   const basePrice = activeService ? activeService.base_price : 0
 
   // The base price is the per-hour rate. The client selects how many hours of
-  // service they need; the labour cost scales linearly with that.
-  const safeHours = Math.max(1, Math.min(12, Number(hours) || 1))
-  const labourCost = basePrice * safeHours
+  // service they need; the labour cost scales linearly with that. Jobs shorter
+  // than the configured normal-hours threshold carry a surcharge multiplier
+  // (short jobs are less attractive to the professional).
+  const safeHours = Math.max(minHours, Math.min(maxHours, Number(hours) || minHours))
+  const hourMultiplier = getHourMultiplier(safeHours, settings)
+  const effectiveHourly = basePrice * hourMultiplier
+  const labourCost = effectiveHourly * safeHours
 
   // Mock distance calculation (e.g. 5km)
   const distanceKm = 5.2
   const distanceFee = distanceKm * 2.5 // R$ 2.50 per km
 
-  const multiplier = isEmergency ? 1.2 : 1.0
-  const finalPrice = (labourCost + distanceFee) * multiplier
+  const emergencyMultiplier = isEmergency ? 1.2 : 1.0
+  const finalPrice = (labourCost + distanceFee) * emergencyMultiplier
+  const band = shortJobBand(safeHours, settings)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -173,19 +187,20 @@ export default function RequestService() {
                     <Clock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                     <Input
                       type="number"
-                      min={1}
-                      max={12}
+                      min={minHours}
+                      max={maxHours}
                       step={1}
                       className="pl-9"
                       value={hours}
                       onChange={(e) => {
                         const v = parseInt(e.target.value, 10)
-                        setHours(Number.isNaN(v) ? 1 : v)
+                        setHours(Number.isNaN(v) ? minHours : v)
                       }}
                     />
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    De 1 a 12 horas. O preço final é proporcional às horas informadas.
+                    Mínimo de {minHours}h (jobs curtos recebem sobretaxa). O preço final é
+                    proporcional às horas informadas.
                   </p>
                 </div>
 
@@ -226,8 +241,22 @@ export default function RequestService() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Valor/hora</span>
+                  <span className="text-muted-foreground">Valor/hora base</span>
                   <span>R$ {basePrice.toFixed(2)}</span>
+                </div>
+                {band && (
+                  <div className="flex justify-between text-sm text-amber-700 font-medium">
+                    <span className="flex items-center gap-1">
+                      Sobretaxa job curto ({band.label}) <Info className="h-3 w-3" />
+                    </span>
+                    <span>{band.multiplier.toFixed(2)}×</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">
+                    Valor/hora efetivo {band ? `(${hourMultiplier.toFixed(2)}×)` : ''}
+                  </span>
+                  <span>R$ {effectiveHourly.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Mão de obra ({safeHours}h)</span>

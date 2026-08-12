@@ -13,6 +13,7 @@ import {
   Gauge,
   Plus,
   Trash2,
+  Hourglass,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import {
@@ -86,6 +87,11 @@ export default function AdminPricing() {
     setSettings((s) => ({ ...s, [key]: isNaN(num) ? 0 : num }))
   }
 
+  const handleShortJobChange = (key: keyof PlatformSettings, value: string) => {
+    const num = value === '' ? 0 : parseFloat(value)
+    setSettings((s) => ({ ...s, [key]: isNaN(num) ? 0 : num }))
+  }
+
   const handleFactorChange = (key: string, value: string) => {
     const num = value === '' ? 0 : parseFloat(value)
     setSettings((s) => ({
@@ -109,6 +115,10 @@ export default function AdminPricing() {
         scheduled_margin_percent: settings.scheduled_margin_percent,
         demand_factors: settings.demand_factors,
         price_per_hour: settings.price_per_hour,
+        min_hours: settings.min_hours,
+        short_job_multiplier_4_5: settings.short_job_multiplier_4_5,
+        short_job_multiplier_6_7: settings.short_job_multiplier_6_7,
+        normal_hours_threshold: settings.normal_hours_threshold,
       })
       setSettings(updated)
       toast({
@@ -297,6 +307,95 @@ export default function AdminPricing() {
               ) : (
                 <>
                   <Save className="h-4 w-4 mr-2" /> Salvar preços por serviço
+                </>
+              )}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Short-job dynamic pricing */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Hourglass className="h-5 w-5 text-primary" /> Ajuste Dinâmico para Jobs Curtos
+          </CardTitle>
+          <CardDescription>
+            Jobs curtos são menos atrativos para o profissional (mesmo custo de deslocamento, menor
+            remuneração). Aplique uma sobretaxa por faixa de horas.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="min_hours">Mínimo de horas por serviço</Label>
+              <Input
+                id="min_hours"
+                type="number"
+                step="1"
+                min="1"
+                value={settings.min_hours}
+                onChange={(e) => handleShortJobChange('min_hours', e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Nenhuma contratação pode ter menos horas que este valor. Padrão: 4h.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="normal_hours_threshold">Limite para preço normal (h+)</Label>
+              <Input
+                id="normal_hours_threshold"
+                type="number"
+                step="1"
+                min="1"
+                value={settings.normal_hours_threshold}
+                onChange={(e) => handleShortJobChange('normal_hours_threshold', e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                A partir deste número de horas não há sobretaxa (multiplicador 1.0×). Padrão: 8h.
+              </p>
+            </div>
+          </div>
+          <Separator />
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="mult_4_5">Multiplicador para 4h–5h</Label>
+              <Input
+                id="mult_4_5"
+                type="number"
+                step="0.05"
+                min="1"
+                value={settings.short_job_multiplier_4_5}
+                onChange={(e) => handleShortJobChange('short_job_multiplier_4_5', e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Ex.: 1.5× transforma R$ 45,00/h em R$ 67,50/h.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="mult_6_7">Multiplicador para 6h–7h</Label>
+              <Input
+                id="mult_6_7"
+                type="number"
+                step="0.05"
+                min="1"
+                value={settings.short_job_multiplier_6_7}
+                onChange={(e) => handleShortJobChange('short_job_multiplier_6_7', e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Ex.: 1.3× transforma R$ 45,00/h em R$ 58,50/h.
+              </p>
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <Button onClick={handleSaveSettings} disabled={savingSettings}>
+              {savingSettings ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Salvando...
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4 mr-2" /> Salvar ajuste de jobs curtos
                 </>
               )}
             </Button>
