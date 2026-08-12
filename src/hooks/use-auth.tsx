@@ -36,7 +36,22 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signUp = async (data: any) => {
     try {
-      await pb.collection('users').create({ ...data, passwordConfirm: data.password })
+      // Build the create payload explicitly so every required auth field is
+      // sent in the exact shape PocketBase v0.23+ expects:
+      //   - `password` + `passwordConfirm` must match
+      //   - `emailVisibility` is set so the email is always returned on the
+      //     record (the app reads user.email in several places)
+      //   - `role` is required on the users collection
+      await pb.collection('users').create({
+        email: data.email,
+        password: data.password,
+        passwordConfirm: data.password,
+        name: data.name,
+        role: data.role,
+        status: data.status,
+        terms_accepted: data.terms_accepted,
+        emailVisibility: true,
+      })
       await pb.collection('users').authWithPassword(data.email, data.password)
       return { error: null }
     } catch (error) {
