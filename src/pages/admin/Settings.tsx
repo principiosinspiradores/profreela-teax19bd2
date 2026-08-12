@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Separator } from '@/components/ui/separator'
 import { useToast } from '@/hooks/use-toast'
-import { Loader2, Save, Percent, MapPin, ToggleLeft, SlidersHorizontal } from 'lucide-react'
+import { Loader2, Save, Percent, Clock, ToggleLeft, SlidersHorizontal } from 'lucide-react'
 import {
   getSettings,
   updateSettings,
@@ -51,7 +51,7 @@ export default function AdminSettings() {
         emergency_margin_percent: settings.emergency_margin_percent,
         scheduled_margin_percent: settings.scheduled_margin_percent,
         demand_factors: settings.demand_factors,
-        price_per_km: settings.price_per_km,
+        price_per_hour: settings.price_per_hour,
         min_service_fee: settings.min_service_fee,
         module_chat_enabled: settings.module_chat_enabled,
         module_reviews_enabled: settings.module_reviews_enabled,
@@ -212,19 +212,19 @@ export default function AdminSettings() {
           <Separator />
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="price_per_km" className="flex items-center gap-1">
-                <MapPin className="h-4 w-4" /> Preço por km (R$)
+              <Label htmlFor="price_per_hour" className="flex items-center gap-1">
+                <Clock className="h-4 w-4" /> Preço por hora (R$)
               </Label>
               <Input
-                id="price_per_km"
+                id="price_per_hour"
                 type="number"
                 step="0.01"
                 min="0"
-                value={settings.price_per_km}
-                onChange={(e) => handleNumberChange('price_per_km', e.target.value)}
+                value={settings.price_per_hour}
+                onChange={(e) => handleNumberChange('price_per_hour', e.target.value)}
               />
               <p className="text-xs text-muted-foreground">
-                Valor cobrado por km para precificação baseada em distância.
+                Valor cobrado por hora trabalhada para precificação base da mão de obra.
               </p>
             </div>
           </div>

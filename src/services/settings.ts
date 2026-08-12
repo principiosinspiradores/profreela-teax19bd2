@@ -18,7 +18,7 @@ export interface PlatformSettings {
     peak?: number
     [k: string]: number | undefined
   }
-  price_per_km: number
+  price_per_hour: number
   min_service_fee: number
   module_chat_enabled: boolean
   module_reviews_enabled: boolean
@@ -32,7 +32,7 @@ const DEFAULT_SETTINGS: PlatformSettings = {
   emergency_margin_percent: 25,
   scheduled_margin_percent: 10,
   demand_factors: { low: 0.9, medium: 1.0, high: 1.2, peak: 1.5 },
-  price_per_km: 2.5,
+  price_per_hour: 2.5,
   min_service_fee: 5,
   module_chat_enabled: true,
   module_reviews_enabled: true,

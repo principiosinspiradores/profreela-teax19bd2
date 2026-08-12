@@ -23,7 +23,7 @@ routerAdd('GET', '/backend/v1/settings', (e) => {
       emergency_margin_percent: record.getFloat('emergency_margin_percent'),
       scheduled_margin_percent: record.getFloat('scheduled_margin_percent'),
       demand_factors: record.get('demand_factors') || {},
-      price_per_km: record.getFloat('price_per_km'),
+      price_per_hour: record.getFloat('price_per_hour'),
       min_service_fee: record.getFloat('min_service_fee'),
       module_chat_enabled: record.getBool('module_chat_enabled'),
       module_reviews_enabled: record.getBool('module_reviews_enabled'),

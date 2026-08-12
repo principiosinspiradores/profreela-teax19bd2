@@ -21,7 +21,9 @@ export const getBanners = () => pb.collection('banners').getFullList({ filter: '
 export const getModerationLogs = () =>
   pb.collection('moderation_logs').getFullList({ expand: 'pro_id' })
 export const createModerationLog = (data: any) => pb.collection('moderation_logs').create(data)
+export const getUsers = () => pb.collection('users').getFullList({ sort: '-created' })
 export const updateUser = (id: string, data: any) => pb.collection('users').update(id, data)
+export const updateService = (id: string, data: any) => pb.collection('services').update(id, data)
 export const getDocuments = () =>
   pb.collection('documents').getFullList({ expand: 'user_id', sort: '-created' })
 export const getUserDocuments = (userId: string) =>

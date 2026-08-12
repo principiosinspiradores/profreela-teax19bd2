@@ -1,14 +1,14 @@
 {
-  "generatedAt": "2026-08-12T18:46:16.555Z",
+  "generatedAt": "2026-08-12T18:59:28.188Z",
   "collections": [
     {
       "name": "users",
       "type": "auth",
       "apiRules": {
-        "list": "id = @request.auth.id",
-        "view": "id = @request.auth.id",
+        "list": "id = @request.auth.id || @request.auth.role = 'admin'",
+        "view": "id = @request.auth.id || @request.auth.role = 'admin'",
         "create": "",
-        "update": "id = @request.auth.id",
+        "update": "id = @request.auth.id || @request.auth.role = 'admin'",
         "delete": "id = @request.auth.id"
       },
       "fields": [
@@ -699,7 +699,7 @@
           "system": false
         },
         {
-          "name": "price_per_km",
+          "name": "price_per_hour",
           "type": "number",
           "required": false,
           "system": false

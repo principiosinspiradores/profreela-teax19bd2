@@ -36,8 +36,8 @@ export function AppSidebar() {
       case 'admin':
         return [
           { title: 'Visão Geral', url: '/admin', icon: BarChart3 },
-          { title: 'Usuários', url: '#', icon: Users },
-          { title: 'Preços Dinâmicos', url: '#', icon: Wallet },
+          { title: 'Usuários', url: '/admin/users', icon: Users },
+          { title: 'Preços Dinâmicos', url: '/admin/pricing', icon: Wallet },
           { title: 'Configurações', url: '/admin/settings', icon: Settings },
         ]
       default:
