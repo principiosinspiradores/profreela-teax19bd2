@@ -43,7 +43,7 @@ const DEFAULT_SETTINGS: PlatformSettings = {
 /** Fetch the current platform settings (public). Falls back to defaults. */
 export async function getSettings(): Promise<PlatformSettings> {
   try {
-    const res = await pb.send('/api/backend/v1/settings', { method: 'GET' })
+    const res = await pb.send('/backend/v1/settings', { method: 'GET' })
     if (res?.ok && res.settings) {
       return { ...DEFAULT_SETTINGS, ...res.settings } as PlatformSettings
     }
@@ -58,7 +58,7 @@ export async function getSettings(): Promise<PlatformSettings> {
  * Returns the updated settings object.
  */
 export async function updateSettings(patch: Partial<PlatformSettings>): Promise<PlatformSettings> {
-  const res = await pb.send('/api/backend/v1/settings', {
+  const res = await pb.send('/backend/v1/settings', {
     method: 'PUT',
     body: patch,
   })

@@ -2,10 +2,10 @@
 // Requires an authenticated user with role = 'admin'.
 // Sensitive keys (Google Maps, Stripe) are intentionally NOT accepted here.
 //
-// PUT /api/backend/v1/settings  (body: partial settings object)
+// PUT /backend/v1/settings  (body: partial settings object)
 routerAdd(
   'PUT',
-  '/api/backend/v1/settings',
+  '/backend/v1/settings',
   (e) => {
     const auth = e.requestInfo().auth
     if (!auth || auth.getString('role') !== 'admin') {

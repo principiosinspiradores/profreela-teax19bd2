@@ -25,7 +25,7 @@ export interface DistanceResult {
 export async function geocodeAddress(address: string): Promise<GeocodeResult | null> {
   if (!address.trim()) return null
   try {
-    const res = await pb.send('/api/backend/v1/maps/geocode', {
+    const res = await pb.send('/backend/v1/maps/geocode', {
       method: 'POST',
       body: { address },
     })
@@ -53,7 +53,7 @@ export async function getDistance(
 ): Promise<DistanceResult | null> {
   if (!origins || !destinations) return null
   try {
-    const res = await pb.send('/api/backend/v1/maps/distance', {
+    const res = await pb.send('/backend/v1/maps/distance', {
       method: 'POST',
       body: { origins, destinations },
     })

@@ -3,8 +3,8 @@
 // to the client. Authenticated users can geocode an address or compute the
 // driving distance/duration between two points.
 //
-// POST /api/backend/v1/maps/geocode      { address: string }
-// POST /api/backend/v1/maps/distance     { origins: string, destinations: string }
+// POST /backend/v1/maps/geocode      { address: string }
+// POST /backend/v1/maps/distance     { origins: string, destinations: string }
 routerAdd('POST', '/backend/v1/maps/geocode', (e) => {
   const auth = e.requestInfo().auth
   if (!auth) {

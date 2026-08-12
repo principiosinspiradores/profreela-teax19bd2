@@ -4,8 +4,8 @@
 // so it can bootstrap the gateway SDK; the SECRET keys live only in the
 // environment and are used here to create the charge with a platform fee split.
 //
-// GET  /api/backend/v1/payments/config   -> { provider, publicKey } (or null)
-// POST /api/backend/v1/payments/create-split
+// GET  /backend/v1/payments/config   -> { provider, publicKey } (or null)
+// POST /backend/v1/payments/create-split
 //   body: { amount, currency, proAccountId, description }
 //   -> creates a payment intent with application_fee_amount = platform fee
 //      computed from the `settings` collection.
@@ -23,7 +23,7 @@ routerAdd('GET', '/backend/v1/payments/config', (e) => {
   return e.json(200, { ok: true, config: { provider: provider, publicKey: publicKey } })
 })
 
-routerAdd('POST', '/api/backend/v1/payments/create-split', (e) => {
+routerAdd('POST', '/backend/v1/payments/create-split', (e) => {
   const auth = e.requestInfo().auth
   if (!auth) {
     return e.json(401, { ok: false, error: 'Autenticação necessária.' })

@@ -27,7 +27,7 @@ export interface PaymentSplit {
 /** Get the configured gateway + its public key (or null if none configured). */
 export async function getPaymentConfig(): Promise<PaymentConfig> {
   try {
-    const res = await pb.send('/api/backend/v1/payments/config', { method: 'GET' })
+    const res = await pb.send('/backend/v1/payments/config', { method: 'GET' })
     if (res?.ok && res.config) {
       return {
         provider: res.config.provider as PaymentConfig['provider'],
@@ -77,7 +77,7 @@ export async function createSplitPayment(params: {
   proAccountId: string
   description?: string
 }): Promise<any> {
-  const res = await pb.send('/api/backend/v1/payments/create-split', {
+  const res = await pb.send('/backend/v1/payments/create-split', {
     method: 'POST',
     body: {
       amount: params.amount,
