@@ -5,7 +5,7 @@
 // PUT /api/backend/v1/settings  (body: partial settings object)
 routerAdd(
   'PUT',
-  '/backend/v1/settings',
+  '/api/backend/v1/settings',
   (e) => {
     const auth = e.requestInfo().auth
     if (!auth || auth.getString('role') !== 'admin') {

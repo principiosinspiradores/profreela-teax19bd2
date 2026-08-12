@@ -1,8 +1,26 @@
 import pb from '@/lib/pocketbase/client'
 
+/**
+ * Shared headers for admin-only service mutations.
+ *
+ * The PocketBase JS SDK normally injects the auth token from `pb.authStore`
+ * automatically, but we set it explicitly here so the request is robust even
+ * if a caller passes a custom fetch config or the store was hydrated late.
+ * `requestKey` disables auto-cancellation (autoCancellation is already off
+ * globally) and guarantees each mutation is independent.
+ */
+const adminHeaders = (): Record<string, string> => {
+  const token = pb.authStore.token
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
 export const getServices = () => pb.collection('services').getFullList()
-export const createService = (data: any) => pb.collection('services').create(data)
-export const deleteService = (id: string) => pb.collection('services').delete(id)
+export const createService = (data: any) =>
+  pb.collection('services').create(data, { headers: adminHeaders() })
+export const updateService = (id: string, data: any) =>
+  pb.collection('services').update(id, data, { headers: adminHeaders() })
+export const deleteService = (id: string) =>
+  pb.collection('services').delete(id, { headers: adminHeaders() })
 export const getJobs = () =>
   pb.collection('jobs').getFullList({ expand: 'service_id,pro_id,customer_id', sort: '-created' })
 export const getProJobs = (proId: string) =>
@@ -25,7 +43,6 @@ export const getModerationLogs = () =>
 export const createModerationLog = (data: any) => pb.collection('moderation_logs').create(data)
 export const getUsers = () => pb.collection('users').getFullList({ sort: '-created' })
 export const updateUser = (id: string, data: any) => pb.collection('users').update(id, data)
-export const updateService = (id: string, data: any) => pb.collection('services').update(id, data)
 export const getDocuments = () =>
   pb.collection('documents').getFullList({ expand: 'user_id', sort: '-created' })
 export const getUserDocuments = (userId: string) =>

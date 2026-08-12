@@ -175,7 +175,6 @@ export default function AdminPricing() {
         name,
         description: form.description.trim(),
         base_price: priceNum,
-        icon: form.icon.trim(),
       })
       setServices((prev) => [...prev, created])
       setCreateOpen(false)
@@ -260,7 +259,6 @@ export default function AdminPricing() {
                 <div key={s.id} className="space-y-2 rounded-lg border p-3">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
-                      {s.icon && <span className="text-lg leading-none">{s.icon}</span>}
                       <Label htmlFor={`svc_${s.id}`} className="truncate font-medium">
                         {s.name}
                       </Label>
@@ -444,32 +442,18 @@ export default function AdminPricing() {
                 onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="svc_price">Preço base/hora (R$) *</Label>
-                <Input
-                  id="svc_price"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  placeholder="25.00"
-                  value={form.base_price}
-                  onChange={(e) => setForm((f) => ({ ...f, base_price: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="svc_icon">Ícone (opcional)</Label>
-                <Input
-                  id="svc_icon"
-                  placeholder="🧹 ou nome do ícone"
-                  value={form.icon}
-                  onChange={(e) => setForm((f) => ({ ...f, icon: e.target.value }))}
-                />
-              </div>
+            <div className="space-y-2">
+              <Label htmlFor="svc_price">Preço base/hora (R$) *</Label>
+              <Input
+                id="svc_price"
+                type="number"
+                step="0.01"
+                min="0"
+                placeholder="25.00"
+                value={form.base_price}
+                onChange={(e) => setForm((f) => ({ ...f, base_price: e.target.value }))}
+              />
             </div>
-            <p className="text-xs text-muted-foreground">
-              O ícone pode ser um emoji ou o nome de um ícone do lucide-react.
-            </p>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)} disabled={creating}>

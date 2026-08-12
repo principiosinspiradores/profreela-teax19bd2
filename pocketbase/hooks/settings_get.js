@@ -3,7 +3,7 @@
 // are NEVER exposed here — they live only in the environment.
 //
 // GET /api/backend/v1/settings
-routerAdd('GET', '/backend/v1/settings', (e) => {
+routerAdd('GET', '/api/backend/v1/settings', (e) => {
   let record = null
   try {
     const rows = $app.findRecordsByFilter('settings', '1=1', '', 1, 0)
