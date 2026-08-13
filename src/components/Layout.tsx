@@ -22,7 +22,7 @@ function PublicHeader() {
 function AuthenticatedHeader() {
   return (
     <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-2 border-b bg-background px-4 shadow-sm">
-      <SidebarTrigger className="-ml-1" />
+      <SidebarTrigger className="-ml-1" label="Menu" />
       <div className="flex flex-1 items-center justify-end"></div>
     </header>
   )
