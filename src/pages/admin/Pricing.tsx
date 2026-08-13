@@ -14,6 +14,7 @@ import {
   Plus,
   Trash2,
   Hourglass,
+  MapPin,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import {
@@ -119,6 +120,8 @@ export default function AdminPricing() {
         short_job_multiplier_4_5: settings.short_job_multiplier_4_5,
         short_job_multiplier_6_7: settings.short_job_multiplier_6_7,
         normal_hours_threshold: settings.normal_hours_threshold,
+        distance_price_per_km: settings.distance_price_per_km,
+        min_distance_fee: settings.min_distance_fee,
       })
       setSettings(updated)
       toast({
@@ -396,6 +399,64 @@ export default function AdminPricing() {
               ) : (
                 <>
                   <Save className="h-4 w-4 mr-2" /> Salvar ajuste de jobs curtos
+                </>
+              )}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Travel / displacement fee */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <MapPin className="h-5 w-5 text-primary" /> Custo de Deslocamento
+          </CardTitle>
+          <CardDescription>
+            Configure o valor cobrado para cobrir o deslocamento do profissional até o local do
+            serviço. A taxa mínima garante um piso mesmo para distâncias curtas.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="distance_price_per_km">Preço por km (R$)</Label>
+              <Input
+                id="distance_price_per_km"
+                type="number"
+                step="0.01"
+                min="0"
+                value={settings.distance_price_per_km}
+                onChange={(e) => handleNumberChange('distance_price_per_km', e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Valor cobrado por quilômetro percorrido pelo profissional. Padrão: R$ 2,50/km.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="min_distance_fee">Taxa mínima de deslocamento (R$)</Label>
+              <Input
+                id="min_distance_fee"
+                type="number"
+                step="0.01"
+                min="0"
+                value={settings.min_distance_fee}
+                onChange={(e) => handleNumberChange('min_distance_fee', e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Valor mínimo cobrado mesmo para distâncias curtas. Padrão: R$ 8,00.
+              </p>
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <Button onClick={handleSaveSettings} disabled={savingSettings}>
+              {savingSettings ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Salvando...
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4 mr-2" /> Salvar custo de deslocamento
                 </>
               )}
             </Button>

@@ -36,6 +36,9 @@ routerAdd('GET', '/backend/v1/settings', (e) => {
       short_job_multiplier_4_5: record.getFloat('short_job_multiplier_4_5') || 1.5,
       short_job_multiplier_6_7: record.getFloat('short_job_multiplier_6_7') || 1.3,
       normal_hours_threshold: record.getFloat('normal_hours_threshold') || 8,
+      // --- Travel / displacement fee --------------------------------------
+      distance_price_per_km: record.getFloat('distance_price_per_km') || 2.5,
+      min_distance_fee: record.getFloat('min_distance_fee') || 8,
       updated: record.getString('updated'),
     },
   })

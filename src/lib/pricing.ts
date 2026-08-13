@@ -46,3 +46,24 @@ export function shortJobBand(
   if (h >= 6) return { multiplier: getHourMultiplier(h, settings), label: '6h–7h' }
   return { multiplier: getHourMultiplier(h, settings), label: '4h–5h' }
 }
+
+/**
+ * Travel/displacement fee for a job.
+ *
+ * The raw cost is `distanceKm × price per km`, but a configurable minimum
+ * fee is applied so short trips still cover the professional's travel. Both
+ * values come from the admin-configurable platform settings, falling back to
+ * sensible defaults when unset.
+ *
+ *   fee = max(distanceKm * price_per_km, min_distance_fee)
+ */
+export function getTravelFee(
+  distanceKm: number,
+  settings: Pick<PlatformSettings, 'distance_price_per_km' | 'min_distance_fee'> = DEFAULT_SETTINGS,
+): number {
+  const km = Math.max(0, Number(distanceKm) || 0)
+  const perKm = settings.distance_price_per_km || DEFAULT_SETTINGS.distance_price_per_km
+  const minFee = settings.min_distance_fee ?? DEFAULT_SETTINGS.min_distance_fee
+  const raw = km * perKm
+  return Math.max(raw, minFee)
+}

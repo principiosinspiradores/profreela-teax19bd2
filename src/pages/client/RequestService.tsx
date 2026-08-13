@@ -1,6 +1,15 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { MapPin, Calendar as CalendarIcon, Info, Zap, Clock } from 'lucide-react'
+import {
+  MapPin,
+  Calendar as CalendarIcon,
+  Info,
+  Zap,
+  Clock,
+  Users,
+  Minus,
+  Plus,
+} from 'lucide-react'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { Button } from '@/components/ui/button'
@@ -21,7 +30,7 @@ import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
 import { getServices, createJob } from '@/services/api'
 import { getSettings, DEFAULT_SETTINGS, type PlatformSettings } from '@/services/settings'
-import { getHourMultiplier, shortJobBand } from '@/lib/pricing'
+import { getHourMultiplier, shortJobBand, getTravelFee } from '@/lib/pricing'
 import { useAuth } from '@/hooks/use-auth'
 
 export default function RequestService() {
@@ -31,6 +40,7 @@ export default function RequestService() {
   const [selectedService, setSelectedService] = useState<string>('')
   const [address, setAddress] = useState('Av. Aquidabã, 400 - Centro, Campinas')
   const [hours, setHours] = useState(4)
+  const [quantity, setQuantity] = useState(1)
   const [settings, setSettings] = useState<PlatformSettings>(DEFAULT_SETTINGS)
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
@@ -60,12 +70,17 @@ export default function RequestService() {
   const effectiveHourly = basePrice * hourMultiplier
   const labourCost = effectiveHourly * safeHours
 
-  // Mock distance calculation (e.g. 5km)
+  // Mock distance calculation (e.g. 5km). In production this would come from
+  // the Google Maps distance-matrix proxy using the client & pro coordinates.
   const distanceKm = 5.2
-  const distanceFee = distanceKm * 2.5 // R$ 2.50 per km
+  const distanceFee = getTravelFee(distanceKm, settings)
 
   const emergencyMultiplier = isEmergency ? 1.2 : 1.0
-  const finalPrice = (labourCost + distanceFee) * emergencyMultiplier
+  // Unit price = a single professional's job cost (labour + travel + emergency)
+  const unitPrice = (labourCost + distanceFee) * emergencyMultiplier
+  // When the client requests N professionals, N independent jobs are created.
+  const quantityClamped = Math.max(1, Math.min(20, Math.round(quantity) || 1))
+  const totalPrice = unitPrice * quantityClamped
   const band = shortJobBand(safeHours, settings)
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -74,11 +89,14 @@ export default function RequestService() {
 
     setLoading(true)
     try {
-      await createJob({
+      // Each requested professional becomes its own independent job. The client
+      // clicks once; we create N separate `jobs` records (one per pro) so each
+      // can be accepted, tracked and paid independently.
+      const basePayload = {
         customer_id: user.id,
         service_id: selectedService,
         status: 'pending',
-        price: finalPrice,
+        price: unitPrice,
         hours: safeHours,
         type,
         address,
@@ -89,10 +107,15 @@ export default function RequestService() {
           : date
             ? date.toISOString()
             : undefined,
-      })
+      }
+      const tasks = Array.from({ length: quantityClamped }, () => createJob(basePayload))
+      await Promise.all(tasks)
       toast({
         title: 'Solicitação Criada!',
-        description: 'Buscando o melhor profissional na sua região...',
+        description:
+          quantityClamped > 1
+            ? `${quantityClamped} solicitações criadas. Buscando profissionais na sua região...`
+            : 'Buscando o melhor profissional na sua região...',
         className: 'bg-primary text-white border-none',
       })
       navigate('/client')
@@ -204,6 +227,53 @@ export default function RequestService() {
                   </p>
                 </div>
 
+                <div className="space-y-2 pt-4 border-t">
+                  <Label className="flex items-center gap-1">
+                    <Users className="h-4 w-4" /> Quantos profissionais?
+                  </Label>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-10 w-10 shrink-0"
+                      onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+                      disabled={quantityClamped <= 1}
+                      aria-label="Diminuir quantidade"
+                    >
+                      <Minus className="h-4 w-4" />
+                    </Button>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={20}
+                      step={1}
+                      className="text-center font-medium"
+                      value={quantity}
+                      onChange={(e) => {
+                        const v = parseInt(e.target.value, 10)
+                        setQuantity(Number.isNaN(v) ? 1 : v)
+                      }}
+                      onBlur={() => setQuantity(quantityClamped)}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="h-10 w-10 shrink-0"
+                      onClick={() => setQuantity((q) => Math.min(20, q + 1))}
+                      disabled={quantityClamped >= 20}
+                      aria-label="Aumentar quantidade"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Serão criadas {quantityClamped} solicitaç{quantityClamped > 1 ? 'ões' : 'ão'}{' '}
+                    independente{quantityClamped > 1 ? 's' : ''} (1 a 20 profissionais).
+                  </p>
+                </div>
+
                 {!isEmergency && (
                   <div className="space-y-2 pt-4 border-t animate-fade-in">
                     <Label>Data do Serviço</Label>
@@ -274,13 +344,25 @@ export default function RequestService() {
                     <span>+ R$ {(labourCost * 0.2).toFixed(2)}</span>
                   </div>
                 )}
-                <div className="border-t pt-4 mt-2">
+                <div className="border-t pt-4 mt-2 space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Custo por profissional</span>
+                    <span>R$ {unitPrice.toFixed(2)}</span>
+                  </div>
+                  {quantityClamped > 1 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Quantidade ({quantityClamped}×)</span>
+                      <span>R$ {totalPrice.toFixed(2)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between items-center font-bold text-xl">
-                    <span>Total</span>
-                    <span>R$ {finalPrice.toFixed(2)}</span>
+                    <span>{quantityClamped > 1 ? 'Total' : 'Total'}</span>
+                    <span>R$ {totalPrice.toFixed(2)}</span>
                   </div>
                   <p className="text-xs text-muted-foreground text-right mt-1">
-                    Preço dinâmico sujeito a região
+                    {quantityClamped > 1
+                      ? `${quantityClamped} profissionais × R$ ${unitPrice.toFixed(2)}`
+                      : 'Preço dinâmico sujeito a região'}
                   </p>
                 </div>
               </CardContent>
@@ -290,7 +372,11 @@ export default function RequestService() {
                   className="w-full h-12 text-lg"
                   disabled={loading || !selectedService}
                 >
-                  Confirmar Pedido
+                  {loading
+                    ? 'Enviando...'
+                    : quantityClamped > 1
+                      ? `Confirmar ${quantityClamped} Pedidos`
+                      : 'Confirmar Pedido'}
                 </Button>
               </CardFooter>
             </Card>
