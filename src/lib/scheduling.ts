@@ -52,7 +52,7 @@ export function formatTime(date: Date): string {
   // -03:00 offset; new Date() parses it to the correct UTC instant, so reading
   // via getUTCHours/Minutes would be 3h off. Instead, shift back by the offset
   // to recover the wall-clock time the user picked.
-  const adjusted = new Date(date.getTime() + 3 * 3600000)
+  const adjusted = new Date(date.getTime() - 3 * 3600000)
   return pad2(adjusted.getUTCHours()) + ':' + pad2(adjusted.getUTCMinutes())
 }
 
@@ -66,7 +66,7 @@ export function formatScheduledSlot(scheduledAt?: string, hours?: number): strin
   if (!scheduledAt) return 'Horário a definir'
   const d = new Date(scheduledAt)
   if (isNaN(d.getTime())) return 'Horário a definir'
-  const adjusted = new Date(d.getTime() + 3 * 3600000)
+  const adjusted = new Date(d.getTime() - 3 * 3600000)
   const datePart = `${pad2(adjusted.getUTCDate())}/${pad2(adjusted.getUTCMonth() + 1)}`
   const start = formatTime(d)
   const h = Number(hours) || 0
