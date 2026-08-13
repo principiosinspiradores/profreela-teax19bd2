@@ -129,7 +129,11 @@ routerAdd(
     if (!isAdminOverride) {
       if (cancelledByRole === 'client') {
         const grace = policy.client_grace_hours
-        if (grace > 0 && hoursSinceAccepted <= grace) {
+        if (jobStatus === 'pending' || !acceptedMs) {
+          // No professional has accepted yet — cancellation is always free.
+          penaltyAmount = 0
+          penaltyLabel = 'Cancelamento gratuito (serviço ainda não aceito)'
+        } else if (grace > 0 && hoursSinceAccepted <= grace) {
           penaltyAmount = 0
           penaltyLabel = 'Cancelamento gratuito (dentro da carência de ' + grace + 'h)'
         } else {

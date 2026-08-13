@@ -25,14 +25,14 @@ export function AppSidebar() {
         return [
           { title: 'Painel', url: '/pro', icon: Home },
           { title: 'Ganhos', url: '/pro/earnings', icon: Wallet },
-          { title: 'Configurações', url: '#', icon: Settings },
+          { title: 'Configurações', url: '/pro/settings', icon: Settings },
         ]
       case 'client':
         return [
           { title: 'Painel', url: '/client', icon: Home },
           { title: 'Nova Solicitação', url: '/client/request', icon: Briefcase },
           { title: 'Histórico', url: '/client/history', icon: History },
-          { title: 'Locais', url: '#', icon: MapPin },
+          { title: 'Locais', url: '/client/locations', icon: MapPin },
         ]
       case 'admin':
         return [
@@ -63,8 +63,8 @@ export function AppSidebar() {
               {items.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild isActive={location.pathname === item.url}>
-                    <Link to={item.url}>
-                      <item.icon />
+                    <Link to={item.url} className="flex items-center gap-2">
+                      <item.icon className="h-4 w-4" />
                       <span>{item.title}</span>
                     </Link>
                   </SidebarMenuButton>

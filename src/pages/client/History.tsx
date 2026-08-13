@@ -12,19 +12,29 @@ import { Button } from '@/components/ui/button'
 import { Download, Star } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { getClientJobs } from '@/services/api'
+import { getReviewsByAuthor } from '@/services/reviews'
+import { ReviewDialog } from '@/components/ReviewDialog'
 import { format } from 'date-fns'
 import { PaymentStatusBadge } from '@/components/PaymentStatusBadge'
 
 export default function ClientHistory() {
   const { user } = useAuth()
   const [jobs, setJobs] = useState<any[]>([])
+  const [reviewedJobIds, setReviewedJobIds] = useState<Set<string>>(new Set())
+  const [reviewJob, setReviewJob] = useState<any>(null)
+
+  const load = () => {
+    if (!user) return
+    Promise.all([getClientJobs(user.id), getReviewsByAuthor(user.id).catch(() => [])]).then(
+      ([res, reviews]) => {
+        setJobs(res.filter((j) => ['completed', 'cancelled'].includes(j.status)))
+        setReviewedJobIds(new Set(reviews.map((r: any) => r.job_id)))
+      },
+    )
+  }
 
   useEffect(() => {
-    if (user) {
-      getClientJobs(user.id).then((res) =>
-        setJobs(res.filter((j) => ['completed', 'cancelled'].includes(j.status))),
-      )
-    }
+    load()
   }, [user])
 
   return (
@@ -83,14 +93,27 @@ export default function ClientHistory() {
                 </TableCell>
                 <TableCell className="text-right">R$ {job.price.toFixed(2)}</TableCell>
                 <TableCell className="text-center">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    title="Baixar Recibo"
-                    disabled={job.status !== 'completed'}
-                  >
-                    <Download className="h-4 w-4" />
-                  </Button>
+                  <div className="flex items-center justify-center gap-1">
+                    {job.status === 'completed' && (job.expand?.pro_id || job.pro_id) && (
+                      <Button
+                        variant={reviewedJobIds.has(job.id) ? 'ghost' : 'outline'}
+                        size="icon"
+                        title={reviewedJobIds.has(job.id) ? 'Avaliado' : 'Avaliar profissional'}
+                        disabled={reviewedJobIds.has(job.id)}
+                        onClick={() => setReviewJob(job)}
+                      >
+                        <Star className="h-4 w-4" />
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      title="Baixar Recibo"
+                      disabled={job.status !== 'completed'}
+                    >
+                      <Download className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
@@ -104,6 +127,13 @@ export default function ClientHistory() {
           </TableBody>
         </Table>
       </div>
+
+      <ReviewDialog
+        job={reviewJob}
+        open={!!reviewJob}
+        onOpenChange={(o) => !o && setReviewJob(null)}
+        onReviewed={load}
+      />
     </div>
   )
 }

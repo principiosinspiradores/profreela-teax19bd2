@@ -26,6 +26,7 @@ import {
   Search,
   Ban,
   RotateCcw,
+  Star,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { getUsers, updateUser } from '@/services/api'
@@ -267,6 +268,7 @@ export default function AdminUsers() {
                     <TableHead>Nome</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Perfil</TableHead>
+                    <TableHead>Avaliação</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Cadastro</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
@@ -292,6 +294,27 @@ export default function AdminUsers() {
                             <SelectItem value="client">Cliente</SelectItem>
                           </SelectContent>
                         </Select>
+                      </TableCell>
+                      <TableCell>
+                        {user.role === 'pro' ? (
+                          <span className="inline-flex items-center gap-1 text-sm">
+                            <Star
+                              className={
+                                'h-3.5 w-3.5 ' +
+                                (Number(user.rating_avg) >= 3
+                                  ? 'fill-amber-400 text-amber-400'
+                                  : 'fill-red-400 text-red-400')
+                              }
+                            />
+                            {Number(user.rating_count) > 0
+                              ? `${Number(user.rating_avg || 0)
+                                  .toFixed(1)
+                                  .replace('.', ',')} (${user.rating_count})`
+                              : '-'}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
                       </TableCell>
                       <TableCell className="space-x-1">
                         <Badge variant={statusVariant[user.status as Status] || 'secondary'}>

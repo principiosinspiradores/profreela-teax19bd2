@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-13T17:29:46.271Z",
+  "generatedAt": "2026-08-13T18:32:46.187Z",
   "collections": [
     {
       "name": "users",
@@ -73,6 +73,24 @@
         {
           "name": "phone",
           "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "suspended",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "rating_avg",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "rating_count",
+          "type": "number",
           "required": false,
           "system": false
         }
@@ -290,6 +308,30 @@
           "type": "number",
           "required": false,
           "system": false
+        },
+        {
+          "name": "cancelled_by",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "cancelled_at",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "cancellation_reason",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "penalty_amount",
+          "type": "number",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": []
@@ -413,7 +455,11 @@
           "autodateTriggers": ["onCreate", "onUpdate"]
         }
       ],
-      "indexes": []
+      "indexes": [
+        "CREATE INDEX `idx_reviews_recipient` ON `reviews` (recipient_id)",
+        "CREATE INDEX `idx_reviews_job` ON `reviews` (job_id)",
+        "CREATE UNIQUE INDEX `idx_reviews_job_author` ON `reviews` (job_id,author_id)"
+      ]
     },
     {
       "name": "documents",
@@ -859,6 +905,230 @@
         }
       ],
       "indexes": []
+    },
+    {
+      "name": "cancellation_policies",
+      "type": "base",
+      "apiRules": {
+        "list": "",
+        "view": "",
+        "create": "@request.auth.id != '' && @request.auth.role = 'admin'",
+        "update": "@request.auth.id != '' && @request.auth.role = 'admin'",
+        "delete": "@request.auth.id != '' && @request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "client_grace_hours",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "client_pct_over_24h",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "client_pct_4_to_24h",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "client_pct_under_4h",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "client_pro_share_pct",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "pro_grace_hours",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "pro_fee_over_24h",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "pro_fee_4_to_24h",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "pro_fee_under_4h",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "pro_monthly_limit",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": []
+    },
+    {
+      "name": "cancellations",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != '' && @request.auth.role = 'admin'",
+        "delete": "@request.auth.id != '' && @request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "job_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "jobs"
+        },
+        {
+          "name": "cancelled_by",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "cancelled_by_role",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["client", "pro"]
+        },
+        {
+          "name": "cancelled_at",
+          "type": "date",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "reason",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "penalty_amount",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "penalty_status",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["pending", "charged", "waived"]
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_cancellations_job ON cancellations (job_id)",
+        "CREATE INDEX idx_cancellations_by ON cancellations (cancelled_by)"
+      ]
+    },
+    {
+      "name": "saved_locations",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && client_id = @request.auth.id",
+        "view": "@request.auth.id != '' && client_id = @request.auth.id",
+        "create": "@request.auth.id != '' && client_id = @request.auth.id",
+        "update": "@request.auth.id != '' && client_id = @request.auth.id",
+        "delete": "@request.auth.id != '' && client_id = @request.auth.id"
+      },
+      "fields": [
+        {
+          "name": "client_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "label",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "address",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "latitude",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "longitude",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": ["CREATE INDEX idx_saved_locations_client ON saved_locations (client_id)"]
     }
   ]
 }

@@ -12,10 +12,12 @@ import NotFound from './pages/NotFound'
 import ProDashboard from './pages/pro/Dashboard'
 import ProEarnings from './pages/pro/Earnings'
 import ProActiveJob from './pages/pro/ActiveJob'
+import ProSettings from './pages/pro/Settings'
 
 import ClientDashboard from './pages/client/Dashboard'
 import ClientRequest from './pages/client/RequestService'
 import ClientHistory from './pages/client/History'
+import ClientLocations from './pages/client/Locations'
 
 import AdminDashboard from './pages/admin/Dashboard'
 import AdminSettings from './pages/admin/Settings'
@@ -75,6 +77,14 @@ const AppRoutes = () => (
           </ProtectedRoute>
         }
       />
+      <Route
+        path="/pro/settings"
+        element={
+          <ProtectedRoute allowedRoles={['pro']}>
+            <ProSettings />
+          </ProtectedRoute>
+        }
+      />
 
       {/* Client Routes */}
       <Route
@@ -98,6 +108,14 @@ const AppRoutes = () => (
         element={
           <ProtectedRoute allowedRoles={['client']}>
             <ClientHistory />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/client/locations"
+        element={
+          <ProtectedRoute allowedRoles={['client']}>
+            <ClientLocations />
           </ProtectedRoute>
         }
       />

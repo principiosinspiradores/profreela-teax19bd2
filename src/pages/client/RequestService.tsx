@@ -31,6 +31,7 @@ import { useToast } from '@/hooks/use-toast'
 import { getServices, createJob } from '@/services/api'
 import { getSettings, DEFAULT_SETTINGS, type PlatformSettings } from '@/services/settings'
 import { getHourMultiplier, shortJobBand, getTravelFee } from '@/lib/pricing'
+import { getSavedLocations, type SavedLocation } from '@/services/locations'
 import { useAuth } from '@/hooks/use-auth'
 
 export default function RequestService() {
@@ -43,6 +44,7 @@ export default function RequestService() {
   const [quantity, setQuantity] = useState(1)
   const [settings, setSettings] = useState<PlatformSettings>(DEFAULT_SETTINGS)
   const [loading, setLoading] = useState(false)
+  const [savedLocations, setSavedLocations] = useState<SavedLocation[]>([])
   const navigate = useNavigate()
   const { toast } = useToast()
   const { user } = useAuth()
@@ -52,7 +54,12 @@ export default function RequestService() {
       .then(setSettings)
       .catch(() => {})
     getServices().then(setServices)
-  }, [])
+    if (user) {
+      getSavedLocations(user.id)
+        .then(setSavedLocations)
+        .catch(() => {})
+    }
+  }, [user])
 
   const minHours = Math.max(1, Math.round(settings.min_hours || DEFAULT_SETTINGS.min_hours))
   const maxHours = 12
@@ -169,6 +176,26 @@ export default function RequestService() {
                       onChange={(e) => setAddress(e.target.value)}
                     />
                   </div>
+                  {savedLocations.length > 0 && (
+                    <div className="flex flex-wrap gap-2 pt-1">
+                      {savedLocations.map((loc) => (
+                        <button
+                          key={loc.id}
+                          type="button"
+                          onClick={() => setAddress(loc.address)}
+                          className={cn(
+                            'inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border transition-colors',
+                            address === loc.address
+                              ? 'border-primary bg-primary/10 text-primary'
+                              : 'border-input hover:bg-muted',
+                          )}
+                        >
+                          <MapPin className="h-3 w-3" />
+                          {loc.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-3 pt-4 border-t">

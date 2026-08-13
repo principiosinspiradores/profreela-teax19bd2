@@ -9,6 +9,7 @@ import {
   QrCode,
   AlertTriangle,
   Ban,
+  Star,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -40,6 +41,20 @@ import {
   DEFAULT_CANCELLATION_POLICY,
   type CancellationPolicy,
 } from '@/services/cancellation'
+import { getReviewsByAuthor } from '@/services/reviews'
+import { ReviewDialog } from '@/components/ReviewDialog'
+
+/** A small emoji set for known service types, used as a fallback thumbnail. */
+const SERVICE_EMOJI: Record<string, string> = {
+  faxineira: '🧹',
+  camareira: '🛏️',
+  'auxiliar de serviços gerais': '🧽',
+  'ajudante operacional': '📦',
+}
+function serviceEmoji(name?: string): string | null {
+  if (!name) return null
+  return SERVICE_EMOJI[name.toLowerCase().trim()] || null
+}
 
 export default function ClientDashboard() {
   const { user } = useAuth()
@@ -57,6 +72,8 @@ export default function ClientDashboard() {
   const [cancelReason, setCancelReason] = useState('')
   const [cancelling, setCancelling] = useState(false)
   const [policy, setPolicy] = useState<CancellationPolicy>(DEFAULT_CANCELLATION_POLICY)
+  const [reviewedJobIds, setReviewedJobIds] = useState<Set<string>>(new Set())
+  const [reviewJob, setReviewJob] = useState<any>(null)
 
   useEffect(() => {
     getCancellationPolicy()
@@ -66,10 +83,16 @@ export default function ClientDashboard() {
 
   const loadData = async () => {
     if (!user) return
-    const [j, b, p] = await Promise.all([getClientJobs(user.id), getBanners(), getNearbyPros()])
+    const [j, b, p, reviews] = await Promise.all([
+      getClientJobs(user.id),
+      getBanners(),
+      getNearbyPros(),
+      getReviewsByAuthor(user.id).catch(() => []),
+    ])
     setJobs(j)
     setBanners(b)
     setPros(p)
+    setReviewedJobIds(new Set((reviews as any[]).map((r) => r.job_id)))
   }
 
   useEffect(() => {
@@ -78,6 +101,7 @@ export default function ClientDashboard() {
   useRealtime('jobs', loadData)
 
   const activeJobs = jobs.filter((j) => ['pending', 'accepted', 'in_progress'].includes(j.status))
+  const completedJobs = jobs.filter((j) => j.status === 'completed')
 
   const handlePayment = async () => {
     if (!paymentJob) return
@@ -224,6 +248,14 @@ export default function ClientDashboard() {
                 <div className="w-8 h-8 rounded-full border-2 border-primary overflow-hidden shadow-lg bg-white">
                   <img src={getAvatarUrl(pro, 128)} className="w-full h-full object-cover" />
                 </div>
+                {Number(pro.rating_count) > 0 && (
+                  <div className="bg-amber-400 text-white text-[10px] px-1.5 py-0.5 rounded-full -mt-1 shadow-sm font-bold flex items-center gap-0.5">
+                    ★{' '}
+                    {Number(pro.rating_avg || 0)
+                      .toFixed(1)
+                      .replace('.', ',')}
+                  </div>
+                )}
                 <div className="w-2 h-2 bg-primary transform rotate-45 -mt-1 shadow-lg" />
               </div>
             ))}
@@ -241,12 +273,18 @@ export default function ClientDashboard() {
             {activeJobs.map((job) => (
               <Card key={job.id} className="hover:shadow-md transition-shadow">
                 <CardContent className="p-0 flex flex-col md:flex-row">
-                  <div className="md:w-48 h-32 bg-muted relative">
-                    <img
-                      src={`https://img.usecurling.com/p/200/200?q=service`}
-                      className="w-full h-full object-cover"
-                      alt="Service"
-                    />
+                  <div className="md:w-48 h-32 bg-muted relative flex items-center justify-center">
+                    {job.expand?.pro_id ? (
+                      <img
+                        src={getAvatarUrl(job.expand.pro_id, 200)}
+                        className="w-full h-full object-cover"
+                        alt={job.expand.pro_id.name || 'Profissional'}
+                      />
+                    ) : (
+                      <span className="text-5xl" aria-hidden>
+                        {serviceEmoji(job.expand?.service_id?.name) || '🧰'}
+                      </span>
+                    )}
                     <Badge className="absolute top-2 right-2 bg-secondary capitalize">
                       {job.status}
                     </Badge>
@@ -271,7 +309,7 @@ export default function ClientDashboard() {
                         <PaymentStatusBadge state={job as PaymentState} />
                       </div>
                     )}
-                    {(job.expand?.pro_id || job.pro_id) && (
+                    {job.expand?.pro_id || job.pro_id ? (
                       <div className="flex items-center gap-3 mt-4 pt-4 border-t">
                         <img
                           src={getAvatarUrl(job.expand?.pro_id || { id: job.pro_id }, 128)}
@@ -319,28 +357,43 @@ export default function ClientDashboard() {
                           </div>
                         )}
                       </div>
-                    )}
-                    {/* Fallback: payment button when accepted even if pro expand is missing */}
-                    {job.status === 'accepted' && !job.expand?.pro_id && !job.pro_id && (
+                    ) : (
                       <div className="flex items-center justify-end gap-2 mt-4 pt-4 border-t">
-                        <Button
-                          size="sm"
-                          className="bg-green-600 hover:bg-green-700 text-white"
-                          onClick={() => setPaymentJob(job)}
-                        >
-                          Pré-autorizar
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="text-red-700 border-red-300 hover:bg-red-50"
-                          onClick={() => {
-                            setCancelJobState(job)
-                            setCancelReason('')
-                          }}
-                        >
-                          <Ban className="h-4 w-4 mr-1" /> Cancelar
-                        </Button>
+                        {job.status === 'pending' && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-red-700 border-red-300 hover:bg-red-50"
+                            onClick={() => {
+                              setCancelJobState(job)
+                              setCancelReason('')
+                            }}
+                          >
+                            <Ban className="h-4 w-4 mr-1" /> Cancelar Serviço
+                          </Button>
+                        )}
+                        {job.status === 'accepted' && (
+                          <>
+                            <Button
+                              size="sm"
+                              className="bg-green-600 hover:bg-green-700 text-white"
+                              onClick={() => setPaymentJob(job)}
+                            >
+                              Pré-autorizar
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-red-700 border-red-300 hover:bg-red-50"
+                              onClick={() => {
+                                setCancelJobState(job)
+                                setCancelReason('')
+                              }}
+                            >
+                              <Ban className="h-4 w-4 mr-1" /> Cancelar
+                            </Button>
+                          </>
+                        )}
                       </div>
                     )}
                     {job.payment_status === 'held' && (
@@ -423,6 +476,51 @@ export default function ClientDashboard() {
         open={!!disputeJob}
         onOpenChange={(o) => !o && setDisputeJob(null)}
         onDisputed={loadData}
+      />
+
+      {/* Completed services — review CTA */}
+      <div>
+        <h2 className="text-xl font-bold mb-4">Serviços Concluídos</h2>
+        {completedJobs.length === 0 ? (
+          <p className="text-muted-foreground">Nenhum serviço concluído ainda.</p>
+        ) : (
+          <div className="grid gap-4">
+            {completedJobs.map((job) => {
+              const reviewed = reviewedJobIds.has(job.id)
+              const hasPro = !!(job.expand?.pro_id || job.pro_id)
+              return (
+                <Card key={job.id}>
+                  <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-semibold">{job.expand?.service_id?.name || 'Serviço'}</p>
+                      <p className="text-sm text-muted-foreground truncate">
+                        {job.expand?.pro_id?.name || 'Profissional'} · {job.address}
+                      </p>
+                    </div>
+                    {hasPro && (
+                      <Button
+                        size="sm"
+                        variant={reviewed ? 'outline' : 'default'}
+                        disabled={reviewed}
+                        onClick={() => setReviewJob(job)}
+                      >
+                        <Star className="h-4 w-4 mr-1" />
+                        {reviewed ? 'Avaliado' : 'Avalie o Profissional'}
+                      </Button>
+                    )}
+                  </CardContent>
+                </Card>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      <ReviewDialog
+        job={reviewJob}
+        open={!!reviewJob}
+        onOpenChange={(o) => !o && setReviewJob(null)}
+        onReviewed={loadData}
       />
 
       {/* Cancellation modal */}

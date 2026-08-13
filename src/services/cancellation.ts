@@ -127,6 +127,15 @@ export function previewPenalty(
   const hoursUntilService = scheduledMs ? (scheduledMs - now) / 3600000 : 0
 
   if (role === 'client') {
+    // No professional has accepted yet — cancellation is always free.
+    if (!acceptedMs) {
+      return {
+        free: true,
+        label: 'Cancelamento gratuito (serviço ainda não aceito)',
+        amount: 0,
+        percent: 0,
+      }
+    }
     const grace = policy.client_grace_hours
     if (grace > 0 && hoursSinceAccepted <= grace) {
       return {
