@@ -1,14 +1,5 @@
 import { useState, useEffect } from 'react'
-import {
-  MapPin,
-  Navigation,
-  Clock,
-  AlertCircle,
-  Wallet,
-  Ban,
-  Loader2,
-  CalendarClock,
-} from 'lucide-react'
+import { MapPin, Clock, AlertCircle, Wallet, Ban, Loader2, CalendarClock } from 'lucide-react'
 import { ClientResponseError } from 'pocketbase'
 import { getErrorMessage } from '@/lib/pocketbase/errors'
 import { Button } from '@/components/ui/button'
@@ -39,6 +30,7 @@ import {
 } from '@/services/api'
 import { getSettings, DEFAULT_SETTINGS, type PlatformSettings } from '@/services/settings'
 import { getHourMultiplier, shortJobBand } from '@/lib/pricing'
+import { formatScheduledSlot } from '@/lib/scheduling'
 import { useRealtime } from '@/hooks/use-realtime'
 import { useToast } from '@/hooks/use-toast'
 import { PaymentStatusBadge } from '@/components/PaymentStatusBadge'
@@ -209,14 +201,20 @@ export default function ProDashboard() {
       setPendingJob(null)
       navigate(`/pro/job/${pendingJob.id}`)
     } catch (err) {
-      // A 409 from the accept_job hook means a scheduling conflict.
+      // A 409 from the accept_job hook means a scheduling conflict; a 400 means
+      // the job is missing the scheduled date/time or duration needed for the
+      // conflict check.
       const isConflict = err instanceof ClientResponseError && err.status === 409
+      const isIncomplete = err instanceof ClientResponseError && err.status === 400
       const description = isConflict
         ? getErrorMessage(err) ||
           'Você já tem um serviço agendado para este horário. Conclua ou cancele o serviço atual antes de aceitar outro.'
-        : 'Não foi possível aceitar a solicitação.'
+        : isIncomplete
+          ? getErrorMessage(err) ||
+            'Dados incompletos: o serviço precisa ter data e horário definidos.'
+          : 'Não foi possível aceitar a solicitação.'
       toast({
-        title: isConflict ? 'Conflito de horário' : 'Erro',
+        title: isConflict ? 'Conflito de horário' : isIncomplete ? 'Dados incompletos' : 'Erro',
         description,
         variant: 'destructive',
       })
@@ -351,6 +349,9 @@ export default function ProDashboard() {
                   <div className="min-w-0">
                     <p className="text-sm font-medium truncate">
                       {job.expand?.service_id?.name || 'Serviço'}
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {formatScheduledSlot(job.scheduled_at, job.hours)}
                     </p>
                     <p className="text-xs text-muted-foreground truncate">{job.address}</p>
                   </div>
@@ -493,13 +494,17 @@ export default function ProDashboard() {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <Navigation className="h-5 w-5 text-muted-foreground" />
+                <CalendarClock className="h-5 w-5 text-muted-foreground" />
                 <div>
                   <p className="font-medium">
                     {pendingJob?.type === 'emergency' ? 'Início Imediato (Emergência)' : 'Agendado'}
                   </p>
-                  {pendingJob?.type === 'emergency' && (
+                  {pendingJob?.type === 'emergency' ? (
                     <p className="text-accent font-medium">Multiplicador de emergência ativo!</p>
+                  ) : (
+                    <p className="text-muted-foreground">
+                      {formatScheduledSlot(pendingJob?.scheduled_at, pendingJob?.hours)}
+                    </p>
                   )}
                 </div>
               </div>

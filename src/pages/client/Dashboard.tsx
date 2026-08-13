@@ -43,6 +43,7 @@ import {
 } from '@/services/cancellation'
 import { getReviewsByAuthor } from '@/services/reviews'
 import { ReviewDialog } from '@/components/ReviewDialog'
+import { formatScheduledSlot } from '@/lib/scheduling'
 
 /** A small emoji set for known service types, used as a fallback thumbnail. */
 const SERVICE_EMOJI: Record<string, string> = {
@@ -300,7 +301,9 @@ export default function ClientDashboard() {
                       <div className="text-right">
                         <p className="font-bold text-lg">R$ {job.price?.toFixed(2)}</p>
                         <p className="text-xs text-muted-foreground">
-                          {job.type === 'emergency' ? 'Emergência' : 'Agendado'}
+                          {job.type === 'emergency'
+                            ? 'Emergência'
+                            : formatScheduledSlot(job.scheduled_at, job.hours)}
                         </p>
                       </div>
                     </div>

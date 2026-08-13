@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-13T20:03:23.871Z",
+  "generatedAt": "2026-08-13T20:34:33.637Z",
   "collections": [
     {
       "name": "users",
@@ -564,6 +564,20 @@
           "required": false,
           "system": false,
           "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "type",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["new_job", "review_request", "payment", "system"]
+        },
+        {
+          "name": "job_id",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "jobs"
         }
       ],
       "indexes": []

@@ -41,10 +41,16 @@ onRecordUpdateRequest((e) => {
 
   const scheduledAt = record.getString('scheduled_at')
   const hours = record.getFloat('hours')
-  // Skip the conflict check when we can't compute a time window.
+  // Do NOT skip validation when the time window is missing — that would let a
+  // pro accept several jobs on the same day without any overlap check. Instead
+  // reject: a service must have a scheduled date/time and a duration before it
+  // can be accepted, otherwise the conflict window cannot be computed.
   if (!scheduledAt || !hours || hours <= 0) {
-    e.next()
-    return
+    return e.json(400, {
+      code: 400,
+      message: 'Dados incompletos: o serviço precisa ter data e horário definidos.',
+      data: { conflict: false, incomplete: true },
+    })
   }
 
   const jobId = record.getString('id')

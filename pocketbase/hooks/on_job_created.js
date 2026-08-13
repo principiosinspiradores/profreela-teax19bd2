@@ -42,24 +42,30 @@ onRecordAfterCreateSuccess((e) => {
   }
 
   // Build a readable date/time string from scheduled_at.
+  //
+  // scheduled_at carries a -03:00 offset, so we read the wall-clock time
+  // through the offset-adjusted date (UTC + 3h) rather than the raw UTC
+  // getters, which would shift the displayed time by 3 hours.
   let whenLabel = 'agendamento a definir'
+  const jobHours = job.getFloat('hours')
   if (scheduledAt) {
     try {
       const d = new Date(scheduledAt)
+      // shift by the -03:00 offset to recover the local wall-clock time
+      const local = new Date(d.getTime() + 3 * 3600000)
       const pad = function (n) {
         n = String(n)
         return n.length < 2 ? '0' + n : n
       }
-      whenLabel =
-        pad(d.getUTCDate()) +
-        '/' +
-        pad(d.getUTCMonth() + 1) +
-        '/' +
-        d.getUTCFullYear() +
-        ' às ' +
-        pad(d.getUTCHours()) +
-        ':' +
-        pad(d.getUTCMinutes())
+      const datePart = pad(local.getUTCDate()) + '/' + pad(local.getUTCMonth() + 1)
+      const startTime = pad(local.getUTCHours()) + ':' + pad(local.getUTCMinutes())
+      if (jobHours > 0) {
+        const end = new Date(d.getTime() + jobHours * 3600000 + 3 * 3600000)
+        const endTime = pad(end.getUTCHours()) + ':' + pad(end.getUTCMinutes())
+        whenLabel = datePart + ' das ' + startTime + ' às ' + endTime
+      } else {
+        whenLabel = datePart + ' às ' + startTime
+      }
     } catch (_) {}
   } else if (jobType === 'emergency') {
     whenLabel = 'início imediato'

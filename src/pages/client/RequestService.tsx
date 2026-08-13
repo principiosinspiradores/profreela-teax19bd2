@@ -31,11 +31,13 @@ import { useToast } from '@/hooks/use-toast'
 import { getServices, createJob } from '@/services/api'
 import { getSettings, DEFAULT_SETTINGS, type PlatformSettings } from '@/services/settings'
 import { getHourMultiplier, shortJobBand, getTravelFee } from '@/lib/pricing'
+import { combineDateAndTime, formatTimeRange } from '@/lib/scheduling'
 import { getSavedLocations, type SavedLocation } from '@/services/locations'
 import { useAuth } from '@/hooks/use-auth'
 
 export default function RequestService() {
   const [date, setDate] = useState<Date>()
+  const [time, setTime] = useState('08:00')
   const [type, setType] = useState('scheduled')
   const [services, setServices] = useState<any[]>([])
   const [selectedService, setSelectedService] = useState<string>('')
@@ -90,6 +92,11 @@ export default function RequestService() {
   const totalPrice = unitPrice * quantityClamped
   const band = shortJobBand(safeHours, settings)
 
+  // Full scheduled datetime (date + time) with the -03:00 timezone offset, so
+  // the conflict-overlap hook can compute real [start, end) windows.
+  const scheduledAt = !isEmergency && date ? combineDateAndTime(date, time) : undefined
+  const hasScheduledSlot = !!scheduledAt
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!selectedService || !user) return
@@ -109,20 +116,20 @@ export default function RequestService() {
         address,
         latitude: -22.9099,
         longitude: -47.0626,
-        scheduled_at: isEmergency
-          ? new Date().toISOString()
-          : date
-            ? date.toISOString()
-            : undefined,
+        scheduled_at: isEmergency ? new Date().toISOString() : scheduledAt,
       }
       const tasks = Array.from({ length: quantityClamped }, () => createJob(basePayload))
       await Promise.all(tasks)
+      // Build the post-submit summary including the scheduled time window when
+      // available, so the client sees the real start/end of the service.
+      const slotSummary =
+        !isEmergency && scheduledAt ? ` ${formatTimeRange(scheduledAt, safeHours)}.` : ''
       toast({
         title: 'Solicitação Criada!',
         description:
-          quantityClamped > 1
+          (quantityClamped > 1
             ? `${quantityClamped} solicitações criadas. Buscando profissionais na sua região...`
-            : 'Buscando o melhor profissional na sua região...',
+            : 'Buscando o melhor profissional na sua região...') + slotSummary,
         className: 'bg-primary text-white border-none',
       })
       navigate('/client')
@@ -303,28 +310,44 @@ export default function RequestService() {
 
                 {!isEmergency && (
                   <div className="space-y-2 pt-4 border-t animate-fade-in">
-                    <Label>Data do Serviço</Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant={'outline'}
-                          className={cn(
-                            'w-full justify-start text-left font-normal',
-                            !date && 'text-muted-foreground',
-                          )}
-                        >
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {date ? (
-                            format(date, 'PPP', { locale: ptBR })
-                          ) : (
-                            <span>Escolha uma data</span>
-                          )}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0">
-                        <Calendar mode="single" selected={date} onSelect={setDate} initialFocus />
-                      </PopoverContent>
-                    </Popover>
+                    <Label>Data e Horário do Serviço</Label>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant={'outline'}
+                            className={cn(
+                              'flex-1 justify-start text-left font-normal',
+                              !date && 'text-muted-foreground',
+                            )}
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {date ? (
+                              format(date, 'PPP', { locale: ptBR })
+                            ) : (
+                              <span>Escolha uma data</span>
+                            )}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0">
+                          <Calendar mode="single" selected={date} onSelect={setDate} initialFocus />
+                        </PopoverContent>
+                      </Popover>
+                      <div className="relative sm:w-32">
+                        <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          type="time"
+                          className="pl-9 sm:w-32"
+                          value={time}
+                          onChange={(e) => setTime(e.target.value)}
+                          required
+                        />
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Selecione o dia e o horário de início. O serviço será agendado no fuso horário
+                      de Brasília (UTC-3).
+                    </p>
                   </div>
                 )}
               </CardContent>
@@ -371,6 +394,12 @@ export default function RequestService() {
                     <span>+ R$ {(labourCost * 0.2).toFixed(2)}</span>
                   </div>
                 )}
+                {hasScheduledSlot && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Horário</span>
+                    <span className="font-medium">{formatTimeRange(scheduledAt!, safeHours)}</span>
+                  </div>
+                )}
                 <div className="border-t pt-4 mt-2 space-y-2">
                   <div className="flex justify-between text-sm">
                     <span className="text-muted-foreground">Custo por profissional</span>
@@ -397,7 +426,7 @@ export default function RequestService() {
                 <Button
                   type="submit"
                   className="w-full h-12 text-lg"
-                  disabled={loading || !selectedService}
+                  disabled={loading || !selectedService || (!isEmergency && !date)}
                 >
                   {loading
                     ? 'Enviando...'
