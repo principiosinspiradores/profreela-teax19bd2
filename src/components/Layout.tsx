@@ -1,42 +1,21 @@
-import { useState } from 'react'
-import { Outlet, Link, useNavigate } from 'react-router-dom'
+import { Outlet, Link } from 'react-router-dom'
 import { Briefcase } from 'lucide-react'
 import { SidebarProvider, SidebarTrigger, SidebarInset } from '@/components/ui/sidebar'
 import { useAuth } from '@/hooks/use-auth'
-import type { Role } from '@/hooks/use-auth'
 import { AppSidebar } from './AppSidebar'
-import { Button } from '@/components/ui/button'
-import { AuthDialog } from './auth/AuthDialog'
 
 function PublicHeader() {
-  const [authOpen, setAuthOpen] = useState(false)
-  const [selectedRole, setSelectedRole] = useState<Role>('client')
-
-  const openAuth = (role: Role) => {
-    setSelectedRole(role)
-    setAuthOpen(true)
-  }
-
   return (
-    <>
-      <AuthDialog open={authOpen} onOpenChange={setAuthOpen} initialRole={selectedRole} />
-      <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container flex h-16 items-center justify-between">
-          <Link to="/" className="flex items-center gap-2">
-            <div className="bg-primary text-white p-1.5 rounded-lg shadow-sm">
-              <Briefcase className="h-5 w-5" />
-            </div>
-            <span className="font-bold text-xl tracking-tight text-primary">ProFreela</span>
-          </Link>
-          <div className="flex items-center gap-2 sm:gap-3">
-            <Button variant="outline" onClick={() => openAuth('pro')}>
-              Quero Trabalhar
-            </Button>
-            <Button onClick={() => openAuth('client')}>Quero Contratar</Button>
+    <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <div className="container flex h-16 items-center justify-between">
+        <Link to="/" className="flex items-center gap-2">
+          <div className="bg-primary text-white p-1.5 rounded-lg shadow-sm">
+            <Briefcase className="h-5 w-5" />
           </div>
-        </div>
-      </header>
-    </>
+          <span className="font-bold text-xl tracking-tight text-primary">ProFreela</span>
+        </Link>
+      </div>
+    </header>
   )
 }
 
