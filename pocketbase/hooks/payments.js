@@ -18,6 +18,10 @@
 //
 // All endpoints work in "demo" mode (no live gateway keys): they persist the
 // payment_* fields on the job record and return consistent mock payloads.
+//
+// NOTE (hooks run in a separate VM): all helper logic (settings lookup, fee
+// computation, job lookup) is inlined inside each callback — top-level
+// functions are NOT accessible at runtime.
 
 // ---------------------------------------------------------------------------
 // GET /backend/v1/payments/config
@@ -35,51 +39,6 @@ routerAdd('GET', '/backend/v1/payments/config', (e) => {
   }
   return e.json(200, { ok: true, config: { provider: provider, publicKey: publicKey } })
 })
-
-// ---------------------------------------------------------------------------
-// helper: read the single settings row (inline — hooks run in a separate VM)
-// ---------------------------------------------------------------------------
-function readSettings() {
-  let feePercent = 15
-  let minFee = 5
-  let guaranteeDays = 7
-  let clockInHours = 24
-  try {
-    const rows = $app.findRecordsByFilter('settings', '1=1', '', 1, 0)
-    if (rows.length > 0) {
-      const s = rows[0]
-      const fp = s.getFloat('service_fee_percent')
-      const mf = s.getFloat('min_service_fee')
-      const gd = s.getFloat('guarantee_period_days')
-      const ch = s.getFloat('clock_in_deadline_hours')
-      if (fp > 0) feePercent = fp
-      if (mf > 0) minFee = mf
-      if (gd > 0) guaranteeDays = gd
-      if (ch > 0) clockInHours = ch
-    }
-  } catch (_) {}
-  return {
-    feePercent: feePercent,
-    minFee: minFee,
-    guaranteeDays: guaranteeDays,
-    clockInHours: clockInHours,
-  }
-}
-
-function computeFee(amount, feePercent, minFee) {
-  let feeAmount = Math.round(amount * (feePercent / 100) * 100) // cents
-  const minFeeCents = Math.round(minFee * 100)
-  if (feeAmount < minFeeCents) feeAmount = minFeeCents
-  return feeAmount
-}
-
-function findJob(jobId) {
-  try {
-    return $app.findFirstRecordByData('jobs', 'id', jobId)
-  } catch (_) {
-    return null
-  }
-}
 
 // ---------------------------------------------------------------------------
 // POST /backend/v1/payments/create-split
@@ -107,8 +66,24 @@ routerAdd('POST', '/backend/v1/payments/create-split', (e) => {
     return e.json(400, { ok: false, error: 'Conta do profissional é obrigatória.' })
   }
 
-  const cfg = readSettings()
-  const feeAmountCents = computeFee(amount, cfg.feePercent, cfg.minFee)
+  // --- read settings (inlined) ---------------------------------------------
+  let feePercent = 15
+  let minFee = 5
+  try {
+    const rows = $app.findRecordsByFilter('settings', '1=1', '', 1, 0)
+    if (rows.length > 0) {
+      const s = rows[0]
+      const fp = s.getFloat('service_fee_percent')
+      const mf = s.getFloat('min_service_fee')
+      if (fp > 0) feePercent = fp
+      if (mf > 0) minFee = mf
+    }
+  } catch (_) {}
+
+  // --- compute platform fee (inlined) --------------------------------------
+  let feeAmountCents = Math.round(amount * (feePercent / 100) * 100) // cents
+  const minFeeCents = Math.round(minFee * 100)
+  if (feeAmountCents < minFeeCents) feeAmountCents = minFeeCents
 
   const nowIso = new Date().toISOString()
 
@@ -186,7 +161,10 @@ routerAdd('POST', '/backend/v1/payments/create-split', (e) => {
 
   // Persist authorization state on the job (if a jobId was provided).
   if (jobId) {
-    const job = findJob(jobId)
+    let job = null
+    try {
+      job = $app.findFirstRecordByData('jobs', 'id', jobId)
+    } catch (_) {}
     if (job) {
       job.set('payment_status', 'authorized')
       job.set('payment_intent_id', intentId)
@@ -206,8 +184,8 @@ routerAdd('POST', '/backend/v1/payments/create-split', (e) => {
       currency: currency,
       platform_fee: feeAmountCents / 100,
       pro_amount: (Math.round(amount * 100) - feeAmountCents) / 100,
-      fee_percent: cfg.feePercent,
-      min_fee: cfg.minFee,
+      fee_percent: feePercent,
+      min_fee: minFee,
       capture_method: 'manual',
     },
   })
@@ -232,7 +210,11 @@ routerAdd('POST', '/backend/v1/payments/capture-split', (e) => {
   if (!jobId) {
     return e.json(400, { ok: false, error: 'jobId é obrigatório.' })
   }
-  const job = findJob(jobId)
+  // --- find job (inlined) --------------------------------------------------
+  let job = null
+  try {
+    job = $app.findFirstRecordByData('jobs', 'id', jobId)
+  } catch (_) {}
   if (!job) {
     return e.json(404, { ok: false, error: 'Serviço não encontrado.' })
   }
@@ -261,8 +243,26 @@ routerAdd('POST', '/backend/v1/payments/capture-split', (e) => {
 
   const intentId = job.getString('payment_intent_id')
   const amount = job.getFloat('price')
-  const cfg = readSettings()
-  const feeAmountCents = computeFee(amount, cfg.feePercent, cfg.minFee)
+
+  // --- read settings (inlined) ---------------------------------------------
+  let feePercent = 15
+  let minFee = 5
+  try {
+    const rows = $app.findRecordsByFilter('settings', '1=1', '', 1, 0)
+    if (rows.length > 0) {
+      const s = rows[0]
+      const fp = s.getFloat('service_fee_percent')
+      const mf = s.getFloat('min_service_fee')
+      if (fp > 0) feePercent = fp
+      if (mf > 0) minFee = mf
+    }
+  } catch (_) {}
+
+  // --- compute platform fee (inlined) --------------------------------------
+  let feeAmountCents = Math.round(amount * (feePercent / 100) * 100) // cents
+  const minFeeCents = Math.round(minFee * 100)
+  if (feeAmountCents < minFeeCents) feeAmountCents = minFeeCents
+
   const nowIso = new Date().toISOString()
   const provider = $os.getenv('PAYMENT_PROVIDER') || ''
 
@@ -321,7 +321,7 @@ routerAdd('POST', '/backend/v1/payments/capture-split', (e) => {
       total: amount,
       platform_fee: feeAmountCents / 100,
       pro_amount: (Math.round(amount * 100) - feeAmountCents) / 100,
-      fee_percent: cfg.feePercent,
+      fee_percent: feePercent,
     },
   })
 })
@@ -343,7 +343,11 @@ routerAdd('POST', '/backend/v1/payments/release-payment', (e) => {
   if (!jobId) {
     return e.json(400, { ok: false, error: 'jobId é obrigatório.' })
   }
-  const job = findJob(jobId)
+  // --- find job (inlined) --------------------------------------------------
+  let job = null
+  try {
+    job = $app.findFirstRecordByData('jobs', 'id', jobId)
+  } catch (_) {}
   if (!job) {
     return e.json(404, { ok: false, error: 'Serviço não encontrado.' })
   }
@@ -356,8 +360,17 @@ routerAdd('POST', '/backend/v1/payments/release-payment', (e) => {
     })
   }
 
-  const cfg = readSettings()
-  const holdUntil = new Date(Date.now() + cfg.guaranteeDays * 24 * 3600 * 1000).toISOString()
+  // --- read settings (inlined) ---------------------------------------------
+  let guaranteeDays = 7
+  try {
+    const rows = $app.findRecordsByFilter('settings', '1=1', '', 1, 0)
+    if (rows.length > 0) {
+      const gd = rows[0].getFloat('guarantee_period_days')
+      if (gd > 0) guaranteeDays = gd
+    }
+  } catch (_) {}
+
+  const holdUntil = new Date(Date.now() + guaranteeDays * 24 * 3600 * 1000).toISOString()
   const nowIso = new Date().toISOString()
 
   job.set('payment_status', 'held')
@@ -371,7 +384,7 @@ routerAdd('POST', '/backend/v1/payments/release-payment', (e) => {
     ok: true,
     payment_status: 'held',
     hold_until: holdUntil,
-    guarantee_days: cfg.guaranteeDays,
+    guarantee_days: guaranteeDays,
   })
 })
 
@@ -392,7 +405,11 @@ routerAdd('POST', '/backend/v1/payments/dispute-payment', (e) => {
   if (!jobId) {
     return e.json(400, { ok: false, error: 'jobId é obrigatório.' })
   }
-  const job = findJob(jobId)
+  // --- find job (inlined) --------------------------------------------------
+  let job = null
+  try {
+    job = $app.findFirstRecordByData('jobs', 'id', jobId)
+  } catch (_) {}
   if (!job) {
     return e.json(404, { ok: false, error: 'Serviço não encontrado.' })
   }
@@ -436,7 +453,11 @@ routerAdd('POST', '/backend/v1/payments/cancel-auth', (e) => {
   if (!jobId) {
     return e.json(400, { ok: false, error: 'jobId é obrigatório.' })
   }
-  const job = findJob(jobId)
+  // --- find job (inlined) --------------------------------------------------
+  let job = null
+  try {
+    job = $app.findFirstRecordByData('jobs', 'id', jobId)
+  } catch (_) {}
   if (!job) {
     return e.json(404, { ok: false, error: 'Serviço não encontrado.' })
   }
