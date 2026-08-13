@@ -14,9 +14,10 @@ import { useAuth, type Role } from '@/hooks/use-auth'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useToast } from '@/hooks/use-toast'
 import { getErrorMessage, extractFieldErrors, type FieldErrors } from '@/lib/pocketbase/errors'
-import { Briefcase, Camera, Upload, User } from 'lucide-react'
+import { Camera, Upload, User } from 'lucide-react'
 import pb from '@/lib/pocketbase/client'
 import { getAvatarUrl } from '@/lib/avatar'
+import { BrandLogo } from '@/components/BrandLogo'
 
 interface AuthDialogProps {
   open: boolean
@@ -143,8 +144,8 @@ export function AuthDialog({ open, onOpenChange, initialRole = 'client' }: AuthD
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
-          <div className="mx-auto bg-primary/10 w-12 h-12 rounded-full flex items-center justify-center mb-4">
-            <Briefcase className="h-6 w-6 text-primary" />
+          <div className="mx-auto flex items-center justify-center mb-3">
+            <BrandLogo size="lg" />
           </div>
           <DialogTitle className="text-center text-2xl">
             {isLogin ? 'Bem-vindo de volta' : 'Crie sua conta'}
@@ -268,7 +269,11 @@ export function AuthDialog({ open, onOpenChange, initialRole = 'client' }: AuthD
             </div>
           )}
 
-          <Button type="submit" className="w-full text-md h-12" disabled={loading}>
+          <Button
+            type="submit"
+            className="w-full text-md h-12 bg-[#0D4F5C] hover:bg-[#08353E] text-white font-semibold"
+            disabled={loading}
+          >
             {loading ? 'Aguarde...' : isLogin ? 'Entrar na plataforma' : 'Cadastrar agora'}
           </Button>
 

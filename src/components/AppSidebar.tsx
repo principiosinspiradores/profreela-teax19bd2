@@ -14,6 +14,7 @@ import {
 import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
 import { getAvatarUrl } from '@/lib/avatar'
+import { BrandLogo } from './BrandLogo'
 
 export function AppSidebar() {
   const { role, signOut, user } = useAuth()
@@ -49,11 +50,10 @@ export function AppSidebar() {
 
   return (
     <Sidebar>
-      <SidebarHeader className="p-4 flex flex-row items-center gap-2 border-b">
-        <div className="bg-primary text-white p-1.5 rounded-lg">
-          <Briefcase className="h-5 w-5" />
-        </div>
-        <span className="font-bold text-lg tracking-tight text-primary">ProFreela</span>
+      <SidebarHeader className="p-4 flex flex-row items-center justify-between border-b bg-background">
+        <Link to="/" className="flex items-center">
+          <BrandLogo size="md" />
+        </Link>
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>

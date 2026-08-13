@@ -30,6 +30,21 @@ export default {
         display: ['SF Pro Display', 'Inter var', 'system-ui', 'sans-serif'],
       },
       colors: {
+        petrol: {
+          DEFAULT: '#0D4F5C',
+          dark: '#08353E',
+          light: '#146C7E',
+        },
+        gold: {
+          DEFAULT: '#D4A017',
+          light: '#E5B429',
+          dark: '#B3840E',
+        },
+        charcoal: {
+          DEFAULT: '#1E293B',
+          dark: '#0F172A',
+          light: '#334155',
+        },
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',

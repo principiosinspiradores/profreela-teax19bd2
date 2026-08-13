@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <rect width="100" height="100" rx="24" fill="#0D4F5C"/>
+  <g transform="translate(10, 8)">
+    <!-- Outer white circle ring -->
+    <circle cx="40" cy="40" r="32" fill="none" stroke="#FFFFFF" stroke-width="4"/>
+    <!-- Location Pin Left (White) -->
+    <path d="M40,16 C27,16 17,26 17,39 C17,54 40,70 40,70 C40,70 40,39 40,16 Z" fill="#FFFFFF"/>
+    <!-- Location Pin Right (Gold) -->
+    <path d="M40,16 C53,16 63,26 63,39 C63,54 40,70 40,70 C40,70 40,39 40,16 Z" fill="#D4A017"/>
+    <!-- Checkmark (White with subtle shadow) -->
+    <path d="M28,38 L37,47 L53,29" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>
