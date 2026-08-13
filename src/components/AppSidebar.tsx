@@ -1,4 +1,4 @@
-import { Home, Briefcase, MapPin, Settings, History, Users, BarChart3, Wallet } from 'lucide-react'
+import { Home, Briefcase, Settings, History, Users, BarChart3, Wallet } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
 import {
   Sidebar,
@@ -32,7 +32,6 @@ export function AppSidebar() {
           { title: 'Painel', url: '/client', icon: Home },
           { title: 'Nova Solicitação', url: '/client/request', icon: Briefcase },
           { title: 'Histórico', url: '/client/history', icon: History },
-          { title: 'Locais', url: '/client/locations', icon: MapPin },
         ]
       case 'admin':
         return [

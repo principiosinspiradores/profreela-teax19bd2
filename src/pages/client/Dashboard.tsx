@@ -319,8 +319,8 @@ export default function ClientDashboard() {
                         <span className="text-sm font-medium">
                           {job.expand?.pro_id?.name || 'Profissional'}
                         </span>
-                        {job.status === 'accepted' ? (
-                          <div className="ml-auto flex items-center gap-2">
+                        <div className="ml-auto flex items-center gap-2">
+                          {job.status === 'accepted' && (
                             <Button
                               size="sm"
                               className="bg-green-600 hover:bg-green-700 text-white"
@@ -328,6 +328,18 @@ export default function ClientDashboard() {
                             >
                               Pré-autorizar
                             </Button>
+                          )}
+                          {job.status === 'in_progress' && (
+                            <Button size="sm" variant="default" onClick={() => handleComplete(job)}>
+                              Concluir Serviço
+                            </Button>
+                          )}
+                          {job.status === 'accepted' && (
+                            <Button variant="link" size="sm" className="h-auto py-0">
+                              Enviar Mensagem
+                            </Button>
+                          )}
+                          {(job.status === 'pending' || job.status === 'accepted') && (
                             <Button
                               size="sm"
                               variant="outline"
@@ -339,27 +351,21 @@ export default function ClientDashboard() {
                             >
                               <Ban className="h-4 w-4 mr-1" /> Cancelar Serviço
                             </Button>
-                          </div>
-                        ) : (
-                          <div className="ml-auto flex items-center gap-2">
-                            {job.status === 'in_progress' && (
-                              <Button
-                                size="sm"
-                                variant="default"
-                                onClick={() => handleComplete(job)}
-                              >
-                                Concluir Serviço
-                              </Button>
-                            )}
-                            <Button variant="link" size="sm" className="h-auto py-0">
-                              Enviar Mensagem
-                            </Button>
-                          </div>
-                        )}
+                          )}
+                        </div>
                       </div>
                     ) : (
                       <div className="flex items-center justify-end gap-2 mt-4 pt-4 border-t">
-                        {job.status === 'pending' && (
+                        {job.status === 'accepted' && (
+                          <Button
+                            size="sm"
+                            className="bg-green-600 hover:bg-green-700 text-white"
+                            onClick={() => setPaymentJob(job)}
+                          >
+                            Pré-autorizar
+                          </Button>
+                        )}
+                        {(job.status === 'pending' || job.status === 'accepted') && (
                           <Button
                             size="sm"
                             variant="outline"
@@ -371,28 +377,6 @@ export default function ClientDashboard() {
                           >
                             <Ban className="h-4 w-4 mr-1" /> Cancelar Serviço
                           </Button>
-                        )}
-                        {job.status === 'accepted' && (
-                          <>
-                            <Button
-                              size="sm"
-                              className="bg-green-600 hover:bg-green-700 text-white"
-                              onClick={() => setPaymentJob(job)}
-                            >
-                              Pré-autorizar
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-red-700 border-red-300 hover:bg-red-50"
-                              onClick={() => {
-                                setCancelJobState(job)
-                                setCancelReason('')
-                              }}
-                            >
-                              <Ban className="h-4 w-4 mr-1" /> Cancelar
-                            </Button>
-                          </>
                         )}
                       </div>
                     )}
