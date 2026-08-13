@@ -3,6 +3,7 @@ import { Briefcase } from 'lucide-react'
 import { SidebarProvider, SidebarTrigger, SidebarInset } from '@/components/ui/sidebar'
 import { useAuth } from '@/hooks/use-auth'
 import { AppSidebar } from './AppSidebar'
+import { NotificationBell } from './NotificationBell'
 
 function PublicHeader() {
   return (
@@ -23,7 +24,9 @@ function AuthenticatedHeader() {
   return (
     <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-2 border-b bg-background px-4 shadow-sm">
       <SidebarTrigger className="-ml-1" label="Menu" />
-      <div className="flex flex-1 items-center justify-end"></div>
+      <div className="flex flex-1 items-center justify-end gap-1">
+        <NotificationBell />
+      </div>
     </header>
   )
 }

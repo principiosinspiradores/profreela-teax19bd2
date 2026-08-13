@@ -1,5 +1,16 @@
 import { useState, useEffect } from 'react'
-import { MapPin, Navigation, Clock, AlertCircle, Wallet, Ban, Loader2 } from 'lucide-react'
+import {
+  MapPin,
+  Navigation,
+  Clock,
+  AlertCircle,
+  Wallet,
+  Ban,
+  Loader2,
+  CalendarClock,
+} from 'lucide-react'
+import { ClientResponseError } from 'pocketbase'
+import { getErrorMessage } from '@/lib/pocketbase/errors'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
@@ -184,8 +195,11 @@ export default function ProDashboard() {
     }
   }
 
+  const [accepting, setAccepting] = useState(false)
+
   const acceptJob = async () => {
-    if (!pendingJob) return
+    if (!pendingJob || accepting) return
+    setAccepting(true)
     try {
       await updateJob(pendingJob.id, {
         status: 'accepted',
@@ -194,12 +208,20 @@ export default function ProDashboard() {
       })
       setPendingJob(null)
       navigate(`/pro/job/${pendingJob.id}`)
-    } catch {
+    } catch (err) {
+      // A 409 from the accept_job hook means a scheduling conflict.
+      const isConflict = err instanceof ClientResponseError && err.status === 409
+      const description = isConflict
+        ? getErrorMessage(err) ||
+          'Você já tem um serviço agendado para este horário. Conclua ou cancele o serviço atual antes de aceitar outro.'
+        : 'Não foi possível aceitar a solicitação.'
       toast({
-        title: 'Erro',
-        description: 'Não foi possível aceitar a solicitação.',
+        title: isConflict ? 'Conflito de horário' : 'Erro',
+        description,
         variant: 'destructive',
       })
+    } finally {
+      setAccepting(false)
     }
   }
 
@@ -491,8 +513,17 @@ export default function ProDashboard() {
             <Button
               className="w-full h-12 bg-secondary hover:bg-secondary/90 text-white"
               onClick={acceptJob}
+              disabled={accepting}
             >
-              Aceitar Serviço
+              {accepting ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Aceitando...
+                </>
+              ) : (
+                <>
+                  <CalendarClock className="h-4 w-4 mr-2" /> Aceitar Serviço
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
