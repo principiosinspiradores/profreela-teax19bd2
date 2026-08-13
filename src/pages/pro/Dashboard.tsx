@@ -262,18 +262,32 @@ export default function ProDashboard() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)] relative rounded-xl overflow-hidden border">
-      {/* Fake Map Background */}
-      <div className="absolute inset-0 bg-slate-100 z-0">
-        <img
-          src="https://img.usecurling.com/p/1200/800?q=street%20map&color=gray&dpr=2"
-          alt="Google Maps Mock"
-          className="w-full h-full object-cover opacity-60 mix-blend-multiply"
+      {/* Geometric street-grid background */}
+      <div
+        aria-hidden
+        className="absolute inset-0 z-0 bg-slate-50"
+        style={{
+          backgroundImage:
+            'linear-gradient(to right, hsl(var(--primary) / 0.10) 1px, transparent 1px), linear-gradient(to bottom, hsl(var(--primary) / 0.10) 1px, transparent 1px), linear-gradient(to right, hsl(var(--muted-foreground) / 0.10) 1px, transparent 1px), linear-gradient(to bottom, hsl(var(--muted-foreground) / 0.10) 1px, transparent 1px)',
+          backgroundSize: '120px 120px, 120px 120px, 24px 24px, 24px 24px',
+          backgroundPosition: '0 0, 0 0, 0 0, 0 0',
+        }}
+      >
+        {/* Subtle "avenues" — thicker, fainter diagonal strokes for depth */}
+        <div
+          className="absolute inset-0 opacity-40"
+          style={{
+            backgroundImage:
+              'linear-gradient(45deg, transparent 48%, hsl(var(--primary) / 0.06) 49%, hsl(var(--primary) / 0.06) 51%, transparent 52%), linear-gradient(-45deg, transparent 48%, hsl(var(--primary) / 0.06) 49%, hsl(var(--primary) / 0.06) 51%, transparent 52%)',
+            backgroundSize: '360px 360px, 360px 360px',
+          }}
         />
-        {/* Current Location Marker */}
+        {/* Pulsing location marker at the center */}
         {isOnline && (
-          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex items-center justify-center">
-            <div className="w-6 h-6 bg-secondary rounded-full border-4 border-white shadow-lg z-10" />
-            <div className="absolute w-16 h-16 bg-secondary/30 rounded-full animate-pulse-ring" />
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center">
+            <div className="absolute w-20 h-20 rounded-full bg-secondary/20 animate-pulse-ring" />
+            <div className="absolute w-12 h-12 rounded-full bg-secondary/30 animate-pulse-ring [animation-delay:0.6s]" />
+            <div className="relative w-5 h-5 rounded-full bg-secondary border-[3px] border-white shadow-[0_2px_8px_rgba(0,0,0,0.3)]" />
           </div>
         )}
       </div>
