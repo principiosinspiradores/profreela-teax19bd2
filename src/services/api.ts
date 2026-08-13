@@ -67,5 +67,15 @@ export const getUserDocuments = (userId: string) =>
   pb.collection('documents').getFullList({ filter: `user_id="${userId}"`, sort: '-created' })
 export const createDocument = (data: any) => pb.collection('documents').create(data)
 export const updateDocument = (id: string, data: any) => pb.collection('documents').update(id, data)
-export const getNearbyPros = () =>
-  pb.collection('users').getFullList({ filter: `role="pro" && status="active"` })
+export const getNearbyPros = async () => {
+  const list = await pb.collection('users').getFullList({ filter: `role="pro" && status="active"` })
+  // Suspended professionals must not appear in searches/client discovery.
+  return list.filter((u: any) => !u.suspended)
+}
+
+/** Cancellation audit rows for a given user (used for the monthly reincidence counter). */
+export const getCancellationsByUser = (userId: string) =>
+  pb.collection('cancellations').getFullList({
+    filter: `cancelled_by="${userId}"`,
+    sort: '-cancelled_at',
+  })

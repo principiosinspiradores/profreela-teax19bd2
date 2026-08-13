@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-13T15:24:52.724Z",
+  "generatedAt": "2026-08-13T17:29:46.271Z",
   "collections": [
     {
       "name": "users",
@@ -841,6 +841,18 @@
         },
         {
           "name": "normal_hours_threshold",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "distance_price_per_km",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "min_distance_fee",
           "type": "number",
           "required": false,
           "system": false

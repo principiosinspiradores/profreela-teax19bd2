@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
-import { MapPin, Navigation, Clock, AlertCircle, Wallet } from 'lucide-react'
+import { MapPin, Navigation, Clock, AlertCircle, Wallet, Ban, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -13,11 +14,18 @@ import {
   DialogHeader,
   DialogTitle,
   DialogFooter,
+  DialogDescription,
 } from '@/components/ui/dialog'
 import { useNavigate } from 'react-router-dom'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/use-auth'
-import { getProJobs, updateJob, getUserDocuments, createDocument } from '@/services/api'
+import {
+  getProJobs,
+  updateJob,
+  getUserDocuments,
+  createDocument,
+  getCancellationsByUser,
+} from '@/services/api'
 import { getSettings, DEFAULT_SETTINGS, type PlatformSettings } from '@/services/settings'
 import { getHourMultiplier, shortJobBand } from '@/lib/pricing'
 import { useRealtime } from '@/hooks/use-realtime'
@@ -29,6 +37,13 @@ import {
   formatGuaranteeCountdown,
   type PaymentState,
 } from '@/services/checkout'
+import {
+  getCancellationPolicy,
+  cancelJob,
+  previewPenalty,
+  DEFAULT_CANCELLATION_POLICY,
+  type CancellationPolicy,
+} from '@/services/cancellation'
 
 export default function ProDashboard() {
   const [isOnline, setIsOnline] = useState(false)
@@ -36,12 +51,22 @@ export default function ProDashboard() {
   const [documents, setDocuments] = useState<any[]>([])
   const [uploading, setUploading] = useState(false)
   const [completedJobs, setCompletedJobs] = useState<any[]>([])
+  const [acceptedJobs, setAcceptedJobs] = useState<any[]>([])
   const [settings, setSettings] = useState<PlatformSettings>(DEFAULT_SETTINGS)
+  const [policy, setPolicy] = useState<CancellationPolicy>(DEFAULT_CANCELLATION_POLICY)
+  const [monthlyCancellations, setMonthlyCancellations] = useState(0)
+
+  const [cancelJobState, setCancelJobState] = useState<any>(null)
+  const [cancelReason, setCancelReason] = useState('')
+  const [cancelling, setCancelling] = useState(false)
 
   const loadData = async () => {
     if (!user) return
     getSettings()
       .then(setSettings)
+      .catch(() => {})
+    getCancellationPolicy()
+      .then(setPolicy)
       .catch(() => {})
     const docs = await getUserDocuments(user.id)
     setDocuments(docs)
@@ -59,6 +84,24 @@ export default function ProDashboard() {
           ['held', 'disputed', 'authorized'].includes(j.payment_status || ''),
       ),
     )
+    setAcceptedJobs(jobs.filter((j) => j.pro_id === user.id && j.status === 'accepted'))
+
+    // Monthly reincidence counter (this calendar month).
+    try {
+      const canc = await getCancellationsByUser(user.id)
+      const monthStart = new Date()
+      monthStart.setDate(1)
+      monthStart.setHours(0, 0, 0, 0)
+      const ms = monthStart.getTime()
+      setMonthlyCancellations(
+        canc.filter((c: any) => {
+          const t = c.cancelled_at ? new Date(c.cancelled_at).getTime() : 0
+          return t >= ms
+        }).length,
+      )
+    } catch {
+      /* intentionally ignored */
+    }
   }
 
   // tick for live countdown
@@ -75,6 +118,39 @@ export default function ProDashboard() {
       loadData()
     } catch {
       toast({ title: 'Erro', description: 'Não foi possível cancelar.', variant: 'destructive' })
+    }
+  }
+
+  const handleConfirmCancel = async () => {
+    if (!cancelJobState) return
+    setCancelling(true)
+    try {
+      const res = await cancelJob(cancelJobState.id, cancelReason)
+      if (res.suspended) {
+        toast({
+          title: 'Você foi suspenso',
+          description:
+            'Limite de cancelamentos no mês atingido. Sua conta foi suspensa automaticamente.',
+          variant: 'destructive',
+        })
+      } else {
+        toast({
+          title: 'Serviço cancelado',
+          description:
+            res.penalty_amount > 0 ? res.penalty_label : 'Cancelamento gratuito realizado.',
+        })
+      }
+      setCancelJobState(null)
+      setCancelReason('')
+      loadData()
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao cancelar',
+        description: err?.message || 'Não foi possível cancelar o serviço.',
+        variant: 'destructive',
+      })
+    } finally {
+      setCancelling(false)
     }
   }
 
@@ -125,6 +201,23 @@ export default function ProDashboard() {
         variant: 'destructive',
       })
     }
+  }
+
+  const isSuspended = !!user?.suspended
+
+  if (isSuspended) {
+    return (
+      <div className="max-w-md mx-auto mt-10 space-y-6">
+        <Alert variant="destructive">
+          <Ban className="h-4 w-4" />
+          <AlertTitle>Conta Suspensa</AlertTitle>
+          <AlertDescription>
+            Sua conta foi suspensa por excesso de cancelamentos no mês. Você não pode aceitar novos
+            serviços enquanto estiver suspenso. Entre em contato com o suporte para reativação.
+          </AlertDescription>
+        </Alert>
+      </div>
+    )
   }
 
   if (user?.status === 'pending') {
@@ -207,6 +300,51 @@ export default function ProDashboard() {
 
       {/* Bottom Info Card */}
       <div className="relative z-10 mt-auto m-4 space-y-3">
+        {acceptedJobs.length > 0 && (
+          <Card className="shadow-xl border-white/50 bg-white/95 backdrop-blur">
+            <CardContent className="p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <Clock className="h-4 w-4 text-primary" />
+                <p className="font-semibold text-sm">Serviços aceitos</p>
+              </div>
+              {acceptedJobs.map((job) => (
+                <div
+                  key={job.id}
+                  className="flex flex-wrap items-center justify-between gap-2 border-t pt-2"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">
+                      {job.expand?.service_id?.name || 'Serviço'}
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate">{job.address}</p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="text-red-700 border-red-300 hover:bg-red-50"
+                    onClick={() => {
+                      setCancelJobState(job)
+                      setCancelReason('')
+                    }}
+                  >
+                    <Ban className="h-4 w-4 mr-1" /> Cancelar
+                  </Button>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+        {monthlyCancellations >= policy.pro_monthly_limit - 1 && monthlyCancellations > 0 && (
+          <Alert variant="destructive" className="shadow-xl">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Atenção: risco de suspensão</AlertTitle>
+            <AlertDescription>
+              Você já tem {monthlyCancellations} cancelamento(s) neste mês. Mais um cancelamento
+              resultará em suspensão temporária da sua conta (limite de {policy.pro_monthly_limit}
+              /mês).
+            </AlertDescription>
+          </Alert>
+        )}
         {completedJobs.length > 0 && (
           <Card className="shadow-xl border-white/50 bg-white/95 backdrop-blur">
             <CardContent className="p-4 space-y-3">
@@ -341,6 +479,89 @@ export default function ProDashboard() {
               onClick={acceptJob}
             >
               Aceitar Serviço
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Cancellation modal */}
+      <Dialog
+        open={!!cancelJobState}
+        onOpenChange={(o) => {
+          if (!o) {
+            setCancelJobState(null)
+            setCancelReason('')
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Cancelar Serviço</DialogTitle>
+            <DialogDescription>
+              Confirme o cancelamento do serviço{' '}
+              <strong>{cancelJobState?.expand?.service_id?.name || ''}</strong>.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2 space-y-4">
+            {(() => {
+              if (!cancelJobState) return null
+              const preview = previewPenalty('pro', cancelJobState, policy)
+              return (
+                <div
+                  className={
+                    'p-4 rounded-xl border ' +
+                    (preview.free
+                      ? 'bg-green-50 border-green-200 text-green-800'
+                      : 'bg-amber-50 border-amber-200 text-amber-800')
+                  }
+                >
+                  <p className="font-medium">
+                    {preview.free ? 'Cancelamento gratuito' : preview.label}
+                  </p>
+                  {!preview.free && (
+                    <p className="text-sm mt-1">A taxa será descontada do seu próximo pagamento.</p>
+                  )}
+                </div>
+              )
+            })()}
+            {monthlyCancellations >= policy.pro_monthly_limit - 1 && monthlyCancellations > 0 && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Atenção: mais um cancelamento resultará em suspensão temporária da sua conta.
+                </AlertDescription>
+              </Alert>
+            )}
+            <div className="space-y-2">
+              <Label htmlFor="pro_cancel_reason">Motivo do cancelamento (opcional)</Label>
+              <Textarea
+                id="pro_cancel_reason"
+                placeholder="Informe o motivo, se desejar..."
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setCancelJobState(null)
+                setCancelReason('')
+              }}
+              disabled={cancelling}
+            >
+              Voltar
+            </Button>
+            <Button variant="destructive" onClick={handleConfirmCancel} disabled={cancelling}>
+              {cancelling ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Cancelando...
+                </>
+              ) : (
+                'Confirmar Cancelamento'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

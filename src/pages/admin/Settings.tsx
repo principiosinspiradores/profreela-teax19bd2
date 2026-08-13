@@ -14,6 +14,7 @@ import {
   ToggleLeft,
   SlidersHorizontal,
   ShieldCheck,
+  Ban,
 } from 'lucide-react'
 import {
   getSettings,
@@ -21,16 +22,27 @@ import {
   DEFAULT_SETTINGS,
   type PlatformSettings,
 } from '@/services/settings'
+import {
+  getCancellationPolicy,
+  updateCancellationPolicy,
+  DEFAULT_CANCELLATION_POLICY,
+  type CancellationPolicy,
+} from '@/services/cancellation'
 
 export default function AdminSettings() {
   const { toast } = useToast()
   const [settings, setSettings] = useState<PlatformSettings>(DEFAULT_SETTINGS)
+  const [policy, setPolicy] = useState<CancellationPolicy>(DEFAULT_CANCELLATION_POLICY)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [savingPolicy, setSavingPolicy] = useState(false)
 
   useEffect(() => {
-    getSettings()
-      .then(setSettings)
+    Promise.all([getSettings(), getCancellationPolicy()])
+      .then(([s, p]) => {
+        setSettings(s)
+        setPolicy(p)
+      })
       .finally(() => setLoading(false))
   }, [])
 
@@ -49,6 +61,31 @@ export default function AdminSettings() {
 
   const handleToggle = (key: keyof PlatformSettings, value: boolean) => {
     setSettings((s) => ({ ...s, [key]: value }))
+  }
+
+  const handlePolicyNumberChange = (key: keyof CancellationPolicy, value: string) => {
+    const num = value === '' ? 0 : parseFloat(value)
+    setPolicy((p) => ({ ...p, [key]: isNaN(num) ? 0 : num }))
+  }
+
+  const handleSavePolicy = async () => {
+    setSavingPolicy(true)
+    try {
+      const updated = await updateCancellationPolicy({ ...policy })
+      setPolicy(updated)
+      toast({
+        title: 'Política de cancelamento salva',
+        description: 'As regras de cancelamento foram atualizadas com sucesso.',
+      })
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao salvar',
+        description: err?.message || 'Não foi possível salvar a política de cancelamento.',
+        variant: 'destructive',
+      })
+    } finally {
+      setSavingPolicy(false)
+    }
   }
 
   const handleSave = async () => {
@@ -281,6 +318,196 @@ export default function AdminSettings() {
               Após esse prazo sem clock-in do profissional, a pré-autorização é cancelada
               automaticamente. Padrão: 24h.
             </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Cancellation policy */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Ban className="h-5 w-5 text-primary" /> Política de Cancelamento
+          </CardTitle>
+          <CardDescription>
+            Regras assimétricas (estilo Uber) para cliente e profissional. Os valores padrão já vêm
+            preenchidos conforme a política da plataforma.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-8">
+          {/* Client rules */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <h4 className="font-semibold">Cliente</h4>
+              <span className="text-xs text-muted-foreground">
+                Multa proporcional ao valor do serviço — 50% plataforma / 50% profissional.
+              </span>
+            </div>
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="space-y-2">
+                <Label htmlFor="client_grace" className="flex items-center gap-1">
+                  <Clock className="h-4 w-4" /> Carência gratuita (horas)
+                </Label>
+                <Input
+                  id="client_grace"
+                  type="number"
+                  step="0.5"
+                  min="0"
+                  value={policy.client_grace_hours}
+                  onChange={(e) => handlePolicyNumberChange('client_grace_hours', e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Cancelamento grátis dentro desse prazo após confirmar. Padrão: 2h.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="client_pct_over_24">Multa &gt; 24h antes (%)</Label>
+                <Input
+                  id="client_pct_over_24"
+                  type="number"
+                  step="1"
+                  min="0"
+                  max="100"
+                  value={policy.client_pct_over_24h}
+                  onChange={(e) => handlePolicyNumberChange('client_pct_over_24h', e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">Padrão: 10%.</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="client_pct_4_24">Multa entre 4h e 24h (%)</Label>
+                <Input
+                  id="client_pct_4_24"
+                  type="number"
+                  step="1"
+                  min="0"
+                  max="100"
+                  value={policy.client_pct_4_to_24h}
+                  onChange={(e) => handlePolicyNumberChange('client_pct_4_to_24h', e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">Padrão: 30%.</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="client_pct_under_4">Multa &lt; 4h antes (%)</Label>
+                <Input
+                  id="client_pct_under_4"
+                  type="number"
+                  step="1"
+                  min="0"
+                  max="100"
+                  value={policy.client_pct_under_4h}
+                  onChange={(e) => handlePolicyNumberChange('client_pct_under_4h', e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">Padrão: 50%.</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="client_pro_share">Repasse ao profissional (%)</Label>
+                <Input
+                  id="client_pro_share"
+                  type="number"
+                  step="1"
+                  min="0"
+                  max="100"
+                  value={policy.client_pro_share_pct}
+                  onChange={(e) => handlePolicyNumberChange('client_pro_share_pct', e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Percentual da multa destinado ao profissional (compensação). Padrão: 50%.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* Professional rules */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <h4 className="font-semibold">Profissional</h4>
+              <span className="text-xs text-muted-foreground">
+                Taxas fixas — 100% para a plataforma. Reincidência gera suspensão automática.
+              </span>
+            </div>
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="space-y-2">
+                <Label htmlFor="pro_grace" className="flex items-center gap-1">
+                  <Clock className="h-4 w-4" /> Carência gratuita (horas)
+                </Label>
+                <Input
+                  id="pro_grace"
+                  type="number"
+                  step="0.5"
+                  min="0"
+                  value={policy.pro_grace_hours}
+                  onChange={(e) => handlePolicyNumberChange('pro_grace_hours', e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Cancelamento grátis dentro desse prazo após aceitar. Padrão: 1h.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="pro_fee_over_24">Taxa &gt; 24h antes (R$)</Label>
+                <Input
+                  id="pro_fee_over_24"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={policy.pro_fee_over_24h}
+                  onChange={(e) => handlePolicyNumberChange('pro_fee_over_24h', e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">Padrão: R$ 25,00.</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="pro_fee_4_24">Taxa entre 4h e 24h (R$)</Label>
+                <Input
+                  id="pro_fee_4_24"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={policy.pro_fee_4_to_24h}
+                  onChange={(e) => handlePolicyNumberChange('pro_fee_4_to_24h', e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">Padrão: R$ 50,00.</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="pro_fee_under_4">Taxa &lt; 4h antes (R$)</Label>
+                <Input
+                  id="pro_fee_under_4"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={policy.pro_fee_under_4h}
+                  onChange={(e) => handlePolicyNumberChange('pro_fee_under_4h', e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">Padrão: R$ 80,00.</p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="pro_monthly_limit">Limite de reincidência (mês)</Label>
+                <Input
+                  id="pro_monthly_limit"
+                  type="number"
+                  step="1"
+                  min="1"
+                  value={policy.pro_monthly_limit}
+                  onChange={(e) => handlePolicyNumberChange('pro_monthly_limit', e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Cancelamentos no mês que ativam a suspensão automática. Padrão: 3.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end">
+            <Button onClick={handleSavePolicy} disabled={savingPolicy} size="lg">
+              {savingPolicy ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Salvando...
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4 mr-2" /> Salvar Política
+                </>
+              )}
+            </Button>
           </div>
         </CardContent>
       </Card>

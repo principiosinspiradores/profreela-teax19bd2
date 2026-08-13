@@ -1,9 +1,19 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { PlusCircle, Clock, Shield, MapPin, CreditCard, QrCode, AlertTriangle } from 'lucide-react'
+import {
+  PlusCircle,
+  Clock,
+  Shield,
+  MapPin,
+  CreditCard,
+  QrCode,
+  AlertTriangle,
+  Ban,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Textarea } from '@/components/ui/textarea'
 import {
   Dialog,
   DialogContent,
@@ -14,6 +24,7 @@ import {
 } from '@/components/ui/dialog'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Label } from '@/components/ui/label'
+import { Loader2 } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { getClientJobs, getBanners, getNearbyPros, updateJob } from '@/services/api'
 import { useRealtime } from '@/hooks/use-realtime'
@@ -22,6 +33,13 @@ import { getAvatarUrl } from '@/lib/avatar'
 import { PaymentStatusBadge } from '@/components/PaymentStatusBadge'
 import { DisputeDialog } from '@/components/DisputeDialog'
 import { createSplitPayment, releasePayment, type PaymentState } from '@/services/checkout'
+import {
+  getCancellationPolicy,
+  cancelJob,
+  previewPenalty,
+  DEFAULT_CANCELLATION_POLICY,
+  type CancellationPolicy,
+} from '@/services/cancellation'
 
 export default function ClientDashboard() {
   const { user } = useAuth()
@@ -34,6 +52,17 @@ export default function ClientDashboard() {
   const [paymentMethod, setPaymentMethod] = useState('credit_card')
   const [processingPayment, setProcessingPayment] = useState(false)
   const [disputeJob, setDisputeJob] = useState<any>(null)
+
+  const [cancelJobState, setCancelJobState] = useState<any>(null)
+  const [cancelReason, setCancelReason] = useState('')
+  const [cancelling, setCancelling] = useState(false)
+  const [policy, setPolicy] = useState<CancellationPolicy>(DEFAULT_CANCELLATION_POLICY)
+
+  useEffect(() => {
+    getCancellationPolicy()
+      .then(setPolicy)
+      .catch(() => {})
+  }, [])
 
   const loadData = async () => {
     if (!user) return
@@ -88,6 +117,33 @@ export default function ClientDashboard() {
       loadData()
     } catch {
       toast({ title: 'Erro', description: 'Não foi possível concluir.', variant: 'destructive' })
+    }
+  }
+
+  const handleConfirmCancel = async () => {
+    if (!cancelJobState) return
+    setCancelling(true)
+    try {
+      const res = await cancelJob(cancelJobState.id, cancelReason)
+      toast({
+        title: res.suspended ? 'Serviço cancelado — profissional suspenso' : 'Serviço cancelado',
+        description:
+          res.penalty_amount > 0
+            ? `${res.penalty_label}.`
+            : 'Cancelamento gratuito realizado com sucesso.',
+        variant: res.suspended ? 'destructive' : 'default',
+      })
+      setCancelJobState(null)
+      setCancelReason('')
+      loadData()
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao cancelar',
+        description: err?.message || 'Não foi possível cancelar o serviço.',
+        variant: 'destructive',
+      })
+    } finally {
+      setCancelling(false)
     }
   }
 
@@ -226,13 +282,26 @@ export default function ClientDashboard() {
                           {job.expand?.pro_id?.name || 'Profissional'}
                         </span>
                         {job.status === 'accepted' ? (
-                          <Button
-                            size="sm"
-                            className="ml-auto bg-green-600 hover:bg-green-700 text-white"
-                            onClick={() => setPaymentJob(job)}
-                          >
-                            Pré-autorizar
-                          </Button>
+                          <div className="ml-auto flex items-center gap-2">
+                            <Button
+                              size="sm"
+                              className="bg-green-600 hover:bg-green-700 text-white"
+                              onClick={() => setPaymentJob(job)}
+                            >
+                              Pré-autorizar
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-red-700 border-red-300 hover:bg-red-50"
+                              onClick={() => {
+                                setCancelJobState(job)
+                                setCancelReason('')
+                              }}
+                            >
+                              <Ban className="h-4 w-4 mr-1" /> Cancelar Serviço
+                            </Button>
+                          </div>
                         ) : (
                           <div className="ml-auto flex items-center gap-2">
                             {job.status === 'in_progress' && (
@@ -260,6 +329,17 @@ export default function ClientDashboard() {
                           onClick={() => setPaymentJob(job)}
                         >
                           Pré-autorizar
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-red-700 border-red-300 hover:bg-red-50"
+                          onClick={() => {
+                            setCancelJobState(job)
+                            setCancelReason('')
+                          }}
+                        >
+                          <Ban className="h-4 w-4 mr-1" /> Cancelar
                         </Button>
                       </div>
                     )}
@@ -344,6 +424,83 @@ export default function ClientDashboard() {
         onOpenChange={(o) => !o && setDisputeJob(null)}
         onDisputed={loadData}
       />
+
+      {/* Cancellation modal */}
+      <Dialog
+        open={!!cancelJobState}
+        onOpenChange={(o) => {
+          if (!o) {
+            setCancelJobState(null)
+            setCancelReason('')
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Cancelar Serviço</DialogTitle>
+            <DialogDescription>
+              Confirme o cancelamento do serviço{' '}
+              <strong>{cancelJobState?.expand?.service_id?.name || ''}</strong>.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2 space-y-4">
+            {(() => {
+              if (!cancelJobState) return null
+              const preview = previewPenalty('client', cancelJobState, policy)
+              return (
+                <div
+                  className={
+                    'p-4 rounded-xl border ' +
+                    (preview.free
+                      ? 'bg-green-50 border-green-200 text-green-800'
+                      : 'bg-amber-50 border-amber-200 text-amber-800')
+                  }
+                >
+                  <p className="font-medium">
+                    {preview.free ? 'Cancelamento gratuito' : preview.label}
+                  </p>
+                  {!preview.free && (
+                    <p className="text-sm mt-1">
+                      O valor será deduzido da pré-autorização no cartão ou cobrado via Pix.
+                    </p>
+                  )}
+                </div>
+              )
+            })()}
+            <div className="space-y-2">
+              <Label htmlFor="cancel_reason">Motivo do cancelamento (opcional)</Label>
+              <Textarea
+                id="cancel_reason"
+                placeholder="Informe o motivo, se desejar..."
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.target.value)}
+                rows={3}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setCancelJobState(null)
+                setCancelReason('')
+              }}
+              disabled={cancelling}
+            >
+              Voltar
+            </Button>
+            <Button variant="destructive" onClick={handleConfirmCancel} disabled={cancelling}>
+              {cancelling ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Cancelando...
+                </>
+              ) : (
+                'Confirmar Cancelamento'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

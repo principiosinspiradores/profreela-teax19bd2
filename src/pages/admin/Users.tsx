@@ -18,7 +18,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Loader2, Users as UsersIcon, ShieldOff, ShieldCheck, Search } from 'lucide-react'
+import {
+  Loader2,
+  Users as UsersIcon,
+  ShieldOff,
+  ShieldCheck,
+  Search,
+  Ban,
+  RotateCcw,
+} from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { getUsers, updateUser } from '@/services/api'
 
@@ -110,6 +118,26 @@ export default function AdminUsers() {
       toast({
         title: 'Erro ao atualizar status',
         description: err?.message || 'Não foi possível atualizar o status.',
+        variant: 'destructive',
+      })
+    } finally {
+      setUpdatingId(null)
+    }
+  }
+
+  const handleReactivateSuspended = async (user: any) => {
+    setUpdatingId(user.id)
+    try {
+      const updated = await updateUser(user.id, { suspended: false })
+      refreshOne({ ...user, suspended: updated.suspended ?? false })
+      toast({
+        title: 'Profissional reativado',
+        description: `${user.name || user.email} pode voltar a aceitar serviços.`,
+      })
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao reativar',
+        description: err?.message || 'Não foi possível reativar o profissional.',
         variant: 'destructive',
       })
     } finally {
@@ -265,31 +293,53 @@ export default function AdminUsers() {
                           </SelectContent>
                         </Select>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="space-x-1">
                         <Badge variant={statusVariant[user.status as Status] || 'secondary'}>
                           {statusLabel[user.status as Status] || user.status || '-'}
                         </Badge>
+                        {user.suspended && (
+                          <Badge variant="destructive" className="ml-1">
+                            <Ban className="h-3 w-3 mr-1" /> Suspenso
+                          </Badge>
+                        )}
                       </TableCell>
                       <TableCell className="text-muted-foreground whitespace-nowrap">
                         {fmtDate(user.created)}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          variant={user.status === 'blocked' ? 'outline' : 'destructive'}
-                          size="sm"
-                          disabled={updatingId === user.id}
-                          onClick={() => handleToggleBlock(user)}
-                        >
-                          {updatingId === user.id ? (
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          ) : user.status === 'blocked' ? (
-                            <ShieldCheck className="h-4 w-4 mr-2" />
-                          ) : (
-                            <ShieldOff className="h-4 w-4 mr-2" />
+                        <div className="flex justify-end gap-2">
+                          {user.role === 'pro' && user.suspended && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={updatingId === user.id}
+                              onClick={() => handleReactivateSuspended(user)}
+                            >
+                              {updatingId === user.id ? (
+                                <Loader2 className="h-4 w-4 mr-2" />
+                              ) : (
+                                <RotateCcw className="h-4 w-4 mr-2" />
+                              )}
+                              Reativar
+                            </Button>
                           )}
-                          {user.status === 'blocked' ? 'Desbloquear' : 'Bloquear'}
-                        </Button>
-                      </TableCell>
+                          <Button
+                            variant={user.status === 'blocked' ? 'outline' : 'destructive'}
+                            size="sm"
+                            disabled={updatingId === user.id}
+                            onClick={() => handleToggleBlock(user)}
+                          >
+                            {updatingId === user.id ? (
+                              <Loader2 className="h-4 w-4 mr-2" />
+                            ) : user.status === 'blocked' ? (
+                              <ShieldCheck className="h-4 w-4 mr-2" />
+                            ) : (
+                              <ShieldOff className="h-4 w-4 mr-2" />
+                            )}
+                            {user.status === 'blocked' ? 'Desbloquear' : 'Bloquear'}
+                          </Button>
+                        </div>
+                      </TableCell>{' '}
                     </TableRow>
                   ))}
                 </TableBody>
