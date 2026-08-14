@@ -52,7 +52,7 @@ onRecordAfterCreateSuccess((e) => {
     try {
       const d = new Date(scheduledAt)
       // shift by the -03:00 offset to recover the local wall-clock time
-      const local = new Date(d.getTime() + 3 * 3600000)
+      const local = new Date(d.getTime() - 3 * 3600000)
       const pad = function (n) {
         n = String(n)
         return n.length < 2 ? '0' + n : n
@@ -60,7 +60,7 @@ onRecordAfterCreateSuccess((e) => {
       const datePart = pad(local.getUTCDate()) + '/' + pad(local.getUTCMonth() + 1)
       const startTime = pad(local.getUTCHours()) + ':' + pad(local.getUTCMinutes())
       if (jobHours > 0) {
-        const end = new Date(d.getTime() + jobHours * 3600000 + 3 * 3600000)
+        const end = new Date(d.getTime() + jobHours * 3600000 - 3 * 3600000)
         const endTime = pad(end.getUTCHours()) + ':' + pad(end.getUTCMinutes())
         whenLabel = datePart + ' das ' + startTime + ' às ' + endTime
       } else {
