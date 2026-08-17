@@ -74,6 +74,7 @@ export interface CancelJobResult {
   suspended: boolean
   monthly_cancellations: number
   monthly_limit: number
+  reopened?: boolean
   error?: string
 }
 

@@ -136,6 +136,13 @@ export default function ProDashboard() {
             'Limite de cancelamentos no mês atingido. Sua conta foi suspensa automaticamente.',
           variant: 'destructive',
         })
+      } else if (res.reopened) {
+        toast({
+          title: 'Serviço reaberto',
+          description:
+            (res.penalty_amount > 0 ? res.penalty_label + '. ' : '') +
+            'O serviço foi reaberto e outros profissionais serão notificados.',
+        })
       } else {
         toast({
           title: 'Serviço cancelado',

@@ -106,6 +106,31 @@ routerAdd(
     const nowMs = Date.now()
     const nowIso = new Date(nowMs).toISOString()
 
+    // Build a -03:00 (Brasília) offset ISO string from a millisecond timestamp.
+    // Used when a reopened job's original slot is already in the past and must
+    // be pushed forward to "now" while preserving the -03:00 offset.
+    const buildMinus3Iso = function (ms) {
+      const local = new Date(ms + 3 * 3600000) // shift UTC → Brasília wall-clock
+      const pad = function (n) {
+        n = String(n)
+        return n.length < 2 ? '0' + n : n
+      }
+      return (
+        local.getUTCFullYear() +
+        '-' +
+        pad(local.getUTCMonth() + 1) +
+        '-' +
+        pad(local.getUTCDate()) +
+        'T' +
+        pad(local.getUTCHours()) +
+        ':' +
+        pad(local.getUTCMinutes()) +
+        ':' +
+        pad(local.getUTCSeconds()) +
+        '-03:00'
+      )
+    }
+
     const acceptedAtStr = job.getString('accepted_at')
     const acceptedMs = acceptedAtStr ? new Date(acceptedAtStr).getTime() : 0
 
@@ -219,15 +244,53 @@ routerAdd(
       }
     }
 
-    // --- persist job cancellation ------------------------------------------
-    job.set('status', 'cancelled')
-    job.set('cancelled_by', authId)
-    job.set('cancelled_at', nowIso)
-    if (reason) job.set('cancellation_reason', reason)
-    job.set('penalty_amount', penaltyAmount)
-    // release / cancel any pending pre-authorization that was not captured
-    if (paymentStatus === 'authorized' && penaltyStatus !== 'charged') {
-      job.set('payment_status', 'cancelled')
+    // --- persist job cancellation / reopening ------------------------------
+    //
+    // Professional cancelling an ACCEPTED job reopens it instead of cancelling:
+    // the job goes back to `pending`, the pro is detached, and eligible pros
+    // (plus the client) are notified. The penalty is still computed & recorded.
+    // Every other case (client cancel, pro cancel of a pending job) cancels.
+    const isProReopen = cancelledByRole === 'pro' && jobStatus === 'accepted' && !isAdminOverride
+
+    let reopened = false
+    let newScheduledAt = scheduledAtStr
+
+    if (isProReopen) {
+      // scheduled_at: if the original slot already passed, push it forward to
+      // "now" keeping the same duration (hours). Otherwise keep the original.
+      if (scheduledMs && scheduledMs < nowMs) {
+        // Original slot already passed: push the start to "now". The job's
+        // `hours` field (duration) is preserved unchanged.
+        newScheduledAt = buildMinus3Iso(nowMs)
+      }
+
+      job.set('status', 'pending')
+      job.set('pro_id', '')
+      job.set('accepted_at', '')
+      job.set('reopened', true)
+      if (newScheduledAt) {
+        job.set('scheduled_at', newScheduledAt)
+      }
+      // Keep cancellation audit fields so the history is traceable.
+      job.set('cancelled_by', authId)
+      job.set('cancelled_at', nowIso)
+      if (reason) job.set('cancellation_reason', reason)
+      job.set('penalty_amount', penaltyAmount)
+      // Release any pre-authorization the previous pro held.
+      if (paymentStatus === 'authorized' && penaltyStatus !== 'charged') {
+        job.set('payment_status', 'cancelled')
+      }
+      reopened = true
+    } else {
+      job.set('status', 'cancelled')
+      job.set('cancelled_by', authId)
+      job.set('cancelled_at', nowIso)
+      if (reason) job.set('cancellation_reason', reason)
+      job.set('penalty_amount', penaltyAmount)
+      // release / cancel any pending pre-authorization that was not captured
+      if (paymentStatus === 'authorized' && penaltyStatus !== 'charged') {
+        job.set('payment_status', 'cancelled')
+      }
     }
     $app.save(job)
 
@@ -283,6 +346,114 @@ routerAdd(
       }
     }
 
+    // --- notifications -----------------------------------------------------
+    //
+    // Resolve the service name and a human-readable scheduled-time label so the
+    // notification messages are self-contained. Mirrors on_job_created.js: the
+    // -03:00 offset on scheduled_at means we read the wall-clock time through
+    // the offset-adjusted date (UTC + 3h) instead of the raw UTC getters.
+    let serviceName = 'serviço'
+    const serviceId = job.getString('service_id')
+    if (serviceId) {
+      try {
+        const svc = $app.findFirstRecordByData('services', 'id', serviceId)
+        if (svc) serviceName = svc.getString('name')
+      } catch (_) {}
+    }
+
+    const effectiveScheduledAt = job.getString('scheduled_at')
+    const jobHours = job.getFloat('hours')
+    let whenLabel = 'agendamento a definir'
+    if (effectiveScheduledAt) {
+      try {
+        const d = new Date(effectiveScheduledAt)
+        const local = new Date(d.getTime() - 3 * 3600000)
+        const pad = function (n) {
+          n = String(n)
+          return n.length < 2 ? '0' + n : n
+        }
+        const datePart = pad(local.getUTCDate()) + '/' + pad(local.getUTCMonth() + 1)
+        const startTime = pad(local.getUTCHours()) + ':' + pad(local.getUTCMinutes())
+        if (jobHours > 0) {
+          const end = new Date(d.getTime() + jobHours * 3600000 - 3 * 3600000)
+          const endTime = pad(end.getUTCHours()) + ':' + pad(end.getUTCMinutes())
+          whenLabel = datePart + ' das ' + startTime + ' às ' + endTime
+        } else {
+          whenLabel = datePart + ' às ' + startTime
+        }
+      } catch (_) {}
+    } else if (job.getString('type') === 'emergency') {
+      whenLabel = 'início imediato'
+    }
+
+    let notifCol = null
+    try {
+      notifCol = $app.findCollectionByNameOrId('notifications')
+    } catch (_) {}
+
+    if (notifCol) {
+      const createNotif = function (userId, type, title, message) {
+        if (!userId) return
+        try {
+          const n = new Record(notifCol)
+          n.set('user_id', userId)
+          n.set('type', type)
+          n.set('title', title)
+          n.set('message', message)
+          n.set('job_id', jobId)
+          n.set('read_status', false)
+          $app.save(n)
+        } catch (err) {
+          console.log('[cancel-job] falha ao criar notificação para ' + userId + ':', err)
+        }
+      }
+
+      if (reopened) {
+        // Professional cancelled → reopen. Notify the client…
+        createNotif(
+          customerId,
+          'system',
+          'Profissional cancelou o serviço',
+          'O profissional cancelou o serviço de ' +
+            serviceName +
+            ' agendado para ' +
+            whenLabel +
+            '. Estamos buscando outro profissional para você.',
+        )
+        // …and every eligible pro (same logic as on_job_created.js).
+        let pros = []
+        try {
+          pros = $app.findRecordsByFilter(
+            'users',
+            "role = 'pro' && status = 'active'",
+            '-created',
+            500,
+            0,
+          )
+        } catch (_) {}
+        const reopenedTitle = 'Nova solicitação disponível (reaberta)'
+        const reopenedMsg =
+          'Uma solicitação de ' + serviceName + ' foi reaberta e está disponível para ' + whenLabel
+        for (let i = 0; i < pros.length; i++) {
+          const pro = pros[i]
+          if (pro.getBool('suspended')) continue
+          const proId2 = pro.getString('id')
+          if (!proId2 || proId2 === customerId || proId2 === authId) continue
+          createNotif(proId2, 'new_job', reopenedTitle, reopenedMsg)
+        }
+      } else {
+        // Client (or admin) cancelled → notify the assigned professional.
+        if (proId) {
+          createNotif(
+            proId,
+            'system',
+            'Cliente cancelou o serviço',
+            'O cliente cancelou o serviço de ' + serviceName + ' agendado para ' + whenLabel + '.',
+          )
+        }
+      }
+    }
+
     return e.json(200, {
       ok: true,
       job_id: jobId,
@@ -297,6 +468,7 @@ routerAdd(
       suspended: suspended,
       monthly_cancellations: monthlyCount,
       monthly_limit: policy.pro_monthly_limit,
+      reopened: reopened,
     })
   },
   $apis.requireAuth(),

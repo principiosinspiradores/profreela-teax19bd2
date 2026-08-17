@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-14T21:18:22.473Z",
+  "generatedAt": "2026-08-17T12:17:01.992Z",
   "collections": [
     {
       "name": "users",
@@ -330,6 +330,12 @@
         {
           "name": "penalty_amount",
           "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "reopened",
+          "type": "bool",
           "required": false,
           "system": false
         }
