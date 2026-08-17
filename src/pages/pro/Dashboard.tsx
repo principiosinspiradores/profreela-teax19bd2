@@ -8,6 +8,8 @@ import {
   Loader2,
   CalendarClock,
   Hourglass,
+  Play,
+  Navigation2,
 } from 'lucide-react'
 import pb from '@/lib/pocketbase/client'
 import { ClientResponseError } from 'pocketbase'
@@ -65,6 +67,7 @@ export default function ProDashboard() {
   const [uploading, setUploading] = useState(false)
   const [completedJobs, setCompletedJobs] = useState<any[]>([])
   const [acceptedJobs, setAcceptedJobs] = useState<any[]>([])
+  const [inProgressJobs, setInProgressJobs] = useState<any[]>([])
   const [settings, setSettings] = useState<PlatformSettings>(DEFAULT_SETTINGS)
   const [policy, setPolicy] = useState<CancellationPolicy>(DEFAULT_CANCELLATION_POLICY)
   const [monthlyCancellations, setMonthlyCancellations] = useState(0)
@@ -137,6 +140,7 @@ export default function ProDashboard() {
       ),
     )
     setAcceptedJobs(visibleJobs.filter((j) => j.pro_id === user.id && j.status === 'accepted'))
+    setInProgressJobs(visibleJobs.filter((j) => j.pro_id === user.id && j.status === 'in_progress'))
 
     // Monthly reincidence counter (this calendar month).
     try {
@@ -445,16 +449,50 @@ export default function ProDashboard() {
                     </p>
                     <p className="text-xs text-muted-foreground truncate">{job.address}</p>
                   </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="text-red-700 border-red-300 hover:bg-red-50"
-                    onClick={() => {
-                      setCancelJobState(job)
-                      setCancelReason('')
-                    }}
-                  >
-                    <Ban className="h-4 w-4 mr-1" /> Cancelar
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={() => navigate(`/pro/job/${job.id}`)}>
+                      <Navigation2 className="h-4 w-4 mr-1" /> Continuar
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-red-700 border-red-300 hover:bg-red-50"
+                      onClick={() => {
+                        setCancelJobState(job)
+                        setCancelReason('')
+                      }}
+                    >
+                      <Ban className="h-4 w-4 mr-1" /> Cancelar
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+        {inProgressJobs.length > 0 && (
+          <Card className="shadow-xl border-secondary/40 bg-white/95 backdrop-blur">
+            <CardContent className="p-4 space-y-3">
+              <div className="flex items-center gap-2">
+                <Play className="h-4 w-4 text-secondary" />
+                <p className="font-semibold text-sm">Em andamento</p>
+              </div>
+              {inProgressJobs.map((job) => (
+                <div
+                  key={job.id}
+                  className="flex flex-wrap items-center justify-between gap-2 border-t pt-2"
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">
+                      {job.expand?.service_id?.name || 'Serviço'}
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {formatScheduledSlot(job.scheduled_at, job.hours)}
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate">{job.address}</p>
+                  </div>
+                  <Button size="sm" onClick={() => navigate(`/pro/job/${job.id}`)}>
+                    <Navigation2 className="h-4 w-4 mr-1" /> Continuar serviço
                   </Button>
                 </div>
               ))}

@@ -83,3 +83,33 @@ export function haversineKm(
   const h = Math.sin(dLat / 2) ** 2 + Math.sin(dLng / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2)
   return 2 * R * Math.asin(Math.sqrt(h))
 }
+
+/**
+ * Build a Google Maps Embed API `directions` iframe URL for an origin and
+ * destination. The API key is kept server-side, so this calls the
+ * `/backend/v1/maps/embed-url` proxy which returns the full signed URL ready
+ * to use as an <iframe src>. Returns null on failure.
+ *
+ * Both `origin` and `destination` accept either "lat,lng" strings or addresses.
+ */
+export async function getMapsEmbedUrl(origin: string, destination: string): Promise<string | null> {
+  if (!origin || !destination) return null
+  try {
+    const res = await pb.send('/backend/v1/maps/embed-url', {
+      method: 'POST',
+      body: { origin, destination },
+    })
+    if (res && res.ok && res.url) return res.url as string
+    return null
+  } catch (_) {
+    return null
+  }
+}
+
+/**
+ * Build a plain Google Maps navigation deep link that opens turn-by-turn
+ * directions to a destination. No API key needed — this is a public URL.
+ */
+export function googleMapsDirectionsUrl(lat: number, lng: number): string {
+  return `https://maps.google.com/?daddr=${lat},${lng}`
+}

@@ -55,6 +55,26 @@ export const getClientJobs = (clientId: string) =>
   })
 export const createJob = (data: any) => pb.collection('jobs').create(data)
 export const updateJob = (id: string, data: any) => pb.collection('jobs').update(id, data)
+
+/** Fetch a single job by id with its service + customer expanded. */
+export const getJob = (id: string) =>
+  pb.collection('jobs').getOne(id, { expand: 'service_id,customer_id,pro_id' })
+
+/**
+ * Clock-in: transition an accepted job to `in_progress` through the
+ * `/backend/v1/start-job` server endpoint. Verifies ownership + status and
+ * stamps `started_at` / `clocked_in_at`. Returns the updated job record.
+ */
+export async function startJob(jobId: string): Promise<any> {
+  const res = await pb.send('/backend/v1/start-job', {
+    method: 'POST',
+    body: { jobId },
+  })
+  if (!res?.ok) {
+    throw new Error(res?.error || 'Não foi possível iniciar o serviço.')
+  }
+  return res.job
+}
 export const getBanners = () => pb.collection('banners').getFullList({ filter: 'active=true' })
 export const getModerationLogs = () =>
   pb.collection('moderation_logs').getFullList({ expand: 'pro_id' })
