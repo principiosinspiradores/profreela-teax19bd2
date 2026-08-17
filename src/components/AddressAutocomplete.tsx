@@ -168,15 +168,6 @@ export default function AddressAutocomplete({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiKey])
 
-  // Keep the DOM input in sync with the `value` prop when it changes
-  // externally (saved-location button, clear action) — imperatively, never
-  // via `value={...}`. Google Places stays in full control of the typed text.
-  useEffect(() => {
-    if (inputRef.current && inputRef.current.value !== value) {
-      inputRef.current.value = value
-    }
-  }, [value])
-
   const clear = useCallback(() => {
     onChange('')
     if (inputRef.current) inputRef.current.value = ''
@@ -190,7 +181,7 @@ export default function AddressAutocomplete({
         type="text"
         className="flex h-10 w-full rounded-md border border-input bg-background px-9 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
         placeholder={placeholder}
-        defaultValue=""
+        defaultValue={value}
         autoComplete="off"
         required={required}
       />

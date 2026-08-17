@@ -53,6 +53,9 @@ export default function RequestService() {
   // Parsed components from the selected Google Places suggestion. Stored so we
   // can build a canonical full address string and reuse the lat/lng on submit.
   const [parsedAddr, setParsedAddr] = useState<ParsedAddress | null>(null)
+  // Forces AddressAutocomplete to remount when a saved location is picked, so
+  // the new `defaultValue` (derived from `value`) is applied to a fresh input.
+  const [selectedSavedLocationId, setSelectedSavedLocationId] = useState<string | null>(null)
   const navigate = useNavigate()
   const { toast } = useToast()
   const { user } = useAuth()
@@ -213,6 +216,7 @@ export default function RequestService() {
                 <div className="space-y-2">
                   <Label>Endereço do Local</Label>
                   <AddressAutocomplete
+                    key={selectedSavedLocationId ?? 'new'}
                     value={address}
                     onChange={(v) => {
                       setAddress(v)
@@ -234,6 +238,7 @@ export default function RequestService() {
                           onClick={() => {
                             setAddress(loc.address)
                             setParsedAddr(null)
+                            setSelectedSavedLocationId(loc.id)
                           }}
                           className={cn(
                             'inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border transition-colors',
