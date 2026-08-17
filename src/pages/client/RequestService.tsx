@@ -28,12 +28,14 @@ import { Calendar } from '@/components/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
-import { getServices, createJob } from '@/services/api'
+import { getServices, createJob, getMapsApiKey } from '@/services/api'
 import { getSettings, DEFAULT_SETTINGS, type PlatformSettings } from '@/services/settings'
 import { getHourMultiplier, shortJobBand, getTravelFee } from '@/lib/pricing'
 import { combineDateAndTime, formatTimeRange } from '@/lib/scheduling'
 import { getSavedLocations, type SavedLocation } from '@/services/locations'
 import { useAuth } from '@/hooks/use-auth'
+import AddressAutocomplete, { type ParsedAddress } from '@/components/AddressAutocomplete'
+import { geocodeAddress } from '@/services/googleMaps'
 
 export default function RequestService() {
   const [date, setDate] = useState<Date>()
@@ -47,6 +49,10 @@ export default function RequestService() {
   const [settings, setSettings] = useState<PlatformSettings>(DEFAULT_SETTINGS)
   const [loading, setLoading] = useState(false)
   const [savedLocations, setSavedLocations] = useState<SavedLocation[]>([])
+  const [mapsApiKey, setMapsApiKey] = useState<string | null>(null)
+  // Parsed components from the selected Google Places suggestion. Stored so we
+  // can build a canonical full address string and reuse the lat/lng on submit.
+  const [parsedAddr, setParsedAddr] = useState<ParsedAddress | null>(null)
   const navigate = useNavigate()
   const { toast } = useToast()
   const { user } = useAuth()
@@ -56,6 +62,9 @@ export default function RequestService() {
       .then(setSettings)
       .catch(() => {})
     getServices().then(setServices)
+    getMapsApiKey()
+      .then(setMapsApiKey)
+      .catch(() => {})
     if (user) {
       getSavedLocations(user.id)
         .then(setSavedLocations)
@@ -103,6 +112,36 @@ export default function RequestService() {
 
     setLoading(true)
     try {
+      // Build the full address string used for geocoding, preferring the
+      // parsed components from the Google Places suggestion when available.
+      const p = parsedAddr
+      const enderecoCompleto = p
+        ? `${p.street}, ${p.number} - ${p.neighborhood}, ${p.city} - ${p.state}`.replace(
+            ' - ,',
+            ',',
+          )
+        : address
+
+      // Geocode the address to obtain real coordinates (no more hardcoded
+      // lat/lng). If the Places suggestion already gave us a location we use
+      // it directly; otherwise we call the server-side geocode proxy.
+      let lat = parsedAddr?.lat
+      let lng = parsedAddr?.lng
+      if (lat == null || lng == null) {
+        const geo = await geocodeAddress(enderecoCompleto)
+        if (!geo) {
+          toast({
+            title: 'Endereço inválido',
+            description: 'Não foi possível localizar o endereço. Verifique e tente novamente.',
+            variant: 'destructive',
+          })
+          setLoading(false)
+          return
+        }
+        lat = geo.lat
+        lng = geo.lng
+      }
+
       // Each requested professional becomes its own independent job. The client
       // clicks once; we create N separate `jobs` records (one per pro) so each
       // can be accepted, tracked and paid independently.
@@ -113,9 +152,9 @@ export default function RequestService() {
         price: unitPrice,
         hours: safeHours,
         type,
-        address,
-        latitude: -22.9099,
-        longitude: -47.0626,
+        address: enderecoCompleto,
+        latitude: lat,
+        longitude: lng,
         scheduled_at: isEmergency ? new Date().toISOString() : scheduledAt,
       }
       const tasks = Array.from({ length: quantityClamped }, () => createJob(basePayload))
@@ -173,23 +212,29 @@ export default function RequestService() {
 
                 <div className="space-y-2">
                   <Label>Endereço do Local</Label>
-                  <div className="relative">
-                    <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      className="pl-9"
-                      placeholder="Rua, Número, Bairro"
-                      required
-                      value={address}
-                      onChange={(e) => setAddress(e.target.value)}
-                    />
-                  </div>
+                  <AddressAutocomplete
+                    value={address}
+                    onChange={(v) => {
+                      setAddress(v)
+                      // Typing manually invalidates the previously selected
+                      // parsed suggestion; coordinates will be re-resolved on
+                      // submit via the geocode proxy.
+                      setParsedAddr(null)
+                    }}
+                    onSelect={(parsed) => setParsedAddr(parsed)}
+                    apiKey={mapsApiKey}
+                    required
+                  />
                   {savedLocations.length > 0 && (
                     <div className="flex flex-wrap gap-2 pt-1">
                       {savedLocations.map((loc) => (
                         <button
                           key={loc.id}
                           type="button"
-                          onClick={() => setAddress(loc.address)}
+                          onClick={() => {
+                            setAddress(loc.address)
+                            setParsedAddr(null)
+                          }}
                           className={cn(
                             'inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full border transition-colors',
                             address === loc.address

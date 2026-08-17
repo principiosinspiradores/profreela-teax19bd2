@@ -99,3 +99,18 @@ export const getCancellationsByUser = (userId: string) =>
     filter: `cancelled_by="${userId}"`,
     sort: '-cancelled_at',
   })
+
+/**
+ * Fetch the Google Maps API key for client-side use (Places Autocomplete).
+ * The key is exposed through an authenticated pb_hook endpoint and should be
+ * restricted by API + HTTP referrer in the Google Cloud console.
+ */
+export async function getMapsApiKey(): Promise<string | null> {
+  try {
+    const res = await pb.send('/backend/v1/maps/api-key', { method: 'GET' })
+    if (res && res.ok && res.key) return res.key as string
+    return null
+  } catch (_) {
+    return null
+  }
+}

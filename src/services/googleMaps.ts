@@ -16,10 +16,24 @@ export interface DistanceResult {
 /**
  * Google Maps integration.
  *
- * The API key is stored ONLY in the backend secrets (GOOGLE_MAPS_API_KEY) and
- * is never exposed to the client. All Google calls are proxied through pb_hooks
- * so the key stays server-side.
+ * The server-side API key (GOOGLE_MAPS_API_KEY) backs the geocoding/distance
+ * proxies and is never shipped to the browser. For the Places Autocomplete
+ * widget, however, the Google Maps JavaScript API must be loaded client-side,
+ * so we expose the same key through an authenticated endpoint
+ * (`/backend/v1/maps/api-key`). Restrict that key (Places API + HTTP referrer)
+ * in the Google Cloud console.
  */
+
+/** Fetch the Google Maps API key for client-side use (Places Autocomplete). */
+export async function getMapsApiKey(): Promise<string | null> {
+  try {
+    const res = await pb.send('/backend/v1/maps/api-key', { method: 'GET' })
+    if (res && res.ok && res.key) return res.key as string
+    return null
+  } catch (_) {
+    return null
+  }
+}
 
 /** Geocode an address string into lat/lng coordinates. */
 export async function geocodeAddress(address: string): Promise<GeocodeResult | null> {

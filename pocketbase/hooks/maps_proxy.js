@@ -5,66 +5,139 @@
 //
 // POST /backend/v1/maps/geocode      { address: string }
 // POST /backend/v1/maps/distance     { origins: string, destinations: string }
-routerAdd('POST', '/backend/v1/maps/geocode', (e) => {
-  const auth = e.requestInfo().auth
-  if (!auth) {
-    return e.json(401, { ok: false, error: 'Autenticação necessária.' })
-  }
+//
+// NOTE (hooks run in a separate VM): all logic is inlined inside each callback.
 
-  const body = e.requestInfo().body || {}
-  const address = (body.address || '').toString().trim()
-  if (!address) {
-    return e.json(400, { ok: false, error: 'Endereço é obrigatório.' })
-  }
+routerAdd(
+  'POST',
+  '/backend/v1/maps/geocode',
+  (e) => {
+    const auth = e.requestInfo().auth
+    if (!auth) {
+      return e.json(401, { ok: false, error: 'Autenticação necessária.' })
+    }
 
-  const apiKey = $os.getenv('GOOGLE_MAPS_API_KEY') || ''
-  if (!apiKey) {
-    return e.json(503, { ok: false, error: 'Integração Google Maps não configurada.' })
-  }
+    const body = e.requestInfo().body || {}
+    const address = (body.address || '').toString().trim()
+    if (!address) {
+      return e.json(400, { ok: false, error: 'Endereço é obrigatório.' })
+    }
 
-  const res = $http.send({
-    url: 'https://maps.googleapis.com/maps/api/geocode/json',
-    method: 'GET',
-    headers: { 'Content-Type': 'application/json' },
-    params: {
-      address: address,
-      key: apiKey,
-    },
-    timeout: 15,
-  })
+    const apiKey = $os.getenv('GOOGLE_MAPS_API_KEY') || ''
+    // Log the prefix (first 5 chars) so we can confirm the env var is actually
+    // populated at runtime — without leaking the full key into the logs.
+    console.log(
+      '[maps_proxy/geocode] GOOGLE_MAPS_API_KEY prefix:',
+      apiKey ? apiKey.substring(0, 5) + '...' : '(empty)',
+    )
+    if (!apiKey) {
+      return e.json(503, { ok: false, error: 'Integração Google Maps não configurada.' })
+    }
 
-  return e.json(res.statusCode, res.json || {})
-})
+    // Build the full URL manually with query params in the query string.
+    // Previously this used $http.send with `params`, which produced a 400 from
+    // Google. Inline-encoding the params into the URL avoids any ambiguity in
+    // how the HTTP client serialises the request.
+    const enc = function (s) {
+      return encodeURIComponent(s)
+    }
+    const url =
+      'https://maps.googleapis.com/maps/api/geocode/json?address=' +
+      enc(address) +
+      '&key=' +
+      enc(apiKey)
 
-routerAdd('POST', '/backend/v1/maps/distance', (e) => {
-  const auth = e.requestInfo().auth
-  if (!auth) {
-    return e.json(401, { ok: false, error: 'Autenticação necessária.' })
-  }
+    console.log('[maps_proxy/geocode] request url:', url.replace(enc(apiKey), 'REDACTED'))
 
-  const body = e.requestInfo().body || {}
-  const origins = (body.origins || '').toString().trim()
-  const destinations = (body.destinations || '').toString().trim()
-  if (!origins || !destinations) {
-    return e.json(400, { ok: false, error: 'Origens e destinos são obrigatórios.' })
-  }
+    const res = $http.send({
+      url: url,
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      timeout: 15,
+    })
 
-  const apiKey = $os.getenv('GOOGLE_MAPS_API_KEY') || ''
-  if (!apiKey) {
-    return e.json(503, { ok: false, error: 'Integração Google Maps não configurada.' })
-  }
+    if (res.statusCode !== 200) {
+      // Surface exactly what Google returned so we can diagnose 4xx/5xx.
+      console.log(
+        '[maps_proxy/geocode] non-200 from Google:',
+        'status=',
+        res.statusCode,
+        'body=',
+        res.rawBody || res.body || '',
+      )
+    }
 
-  const res = $http.send({
-    url: 'https://maps.googleapis.com/maps/api/distancematrix/json',
-    method: 'GET',
-    headers: { 'Content-Type': 'application/json' },
-    params: {
-      origins: origins,
-      destinations: destinations,
-      key: apiKey,
-    },
-    timeout: 15,
-  })
+    // Parse the JSON body if possible; otherwise return the raw text so the
+    // client can see the actual error message from Google.
+    let parsed = null
+    try {
+      parsed = res.json
+    } catch (_) {
+      parsed = { ok: false, raw: res.rawBody || res.body || '' }
+    }
 
-  return e.json(res.statusCode, res.json || {})
-})
+    return e.json(res.statusCode, parsed || {})
+  },
+  $apis.requireAuth(),
+)
+
+routerAdd(
+  'POST',
+  '/backend/v1/maps/distance',
+  (e) => {
+    const auth = e.requestInfo().auth
+    if (!auth) {
+      return e.json(401, { ok: false, error: 'Autenticação necessária.' })
+    }
+
+    const body = e.requestInfo().body || {}
+    const origins = (body.origins || '').toString().trim()
+    const destinations = (body.destinations || '').toString().trim()
+    if (!origins || !destinations) {
+      return e.json(400, { ok: false, error: 'Origens e destinos são obrigatórios.' })
+    }
+
+    const apiKey = $os.getenv('GOOGLE_MAPS_API_KEY') || ''
+    if (!apiKey) {
+      return e.json(503, { ok: false, error: 'Integração Google Maps não configurada.' })
+    }
+
+    const enc = function (s) {
+      return encodeURIComponent(s)
+    }
+    const url =
+      'https://maps.googleapis.com/maps/api/distancematrix/json?origins=' +
+      enc(origins) +
+      '&destinations=' +
+      enc(destinations) +
+      '&key=' +
+      enc(apiKey)
+
+    const res = $http.send({
+      url: url,
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      timeout: 15,
+    })
+
+    if (res.statusCode !== 200) {
+      console.log(
+        '[maps_proxy/distance] non-200 from Google:',
+        'status=',
+        res.statusCode,
+        'body=',
+        res.rawBody || res.body || '',
+      )
+    }
+
+    let parsed = null
+    try {
+      parsed = res.json
+    } catch (_) {
+      parsed = { ok: false, raw: res.rawBody || res.body || '' }
+    }
+
+    return e.json(res.statusCode, parsed || {})
+  },
+  $apis.requireAuth(),
+)
