@@ -11,27 +11,35 @@
 routerAdd(
   'POST',
   '/backend/v1/maps/geocode',
-  (e) => {
+  async (e) => {
     const auth = e.requestInfo().auth
     if (!auth) {
       return e.json(401, { ok: false, error: 'Autenticação necessária.' })
     }
 
     // PocketBase does not always parse the JSON request body into an object
-    // on `requestInfo().body` — it can arrive as a raw JSON string, which
-    // makes `body.address` undefined and trips our own "Endereço é
-    // obrigatório." validation. Parse the body manually before extracting.
-    let body
+    // on `requestInfo().body` — it can arrive as a raw JSON string, a byte
+    // array or a buffer, which makes `body.address` undefined and trips our
+    // own "Endereço é obrigatório." validation. Parse the body manually
+    // before extracting any field.
+    let body = {}
     try {
-      body =
-        typeof e.requestInfo().body === 'string'
-          ? JSON.parse(e.requestInfo().body)
-          : e.requestInfo().body || {}
-    } catch (_) {
-      body = {}
+      const rawBody = await e.requestInfo().body
+      if (typeof rawBody === 'string') {
+        body = JSON.parse(rawBody)
+      } else if (rawBody instanceof Uint8Array || rawBody instanceof ArrayBuffer) {
+        body = JSON.parse(new TextDecoder().decode(rawBody))
+      } else if (rawBody && typeof rawBody === 'object') {
+        body = rawBody
+      }
+    } catch (err) {
+      console.log('[maps_proxy] Erro ao parsear body:', err)
+      return e.json(400, { ok: false, error: 'Body inválido.' })
     }
+
     const address = (body.address || '').toString().trim()
     if (!address) {
+      console.log('[maps_proxy] Body recebido:', JSON.stringify(body))
       return e.json(400, { ok: false, error: 'Endereço é obrigatório.' })
     }
 
@@ -96,16 +104,35 @@ routerAdd(
 routerAdd(
   'POST',
   '/backend/v1/maps/distance',
-  (e) => {
+  async (e) => {
     const auth = e.requestInfo().auth
     if (!auth) {
       return e.json(401, { ok: false, error: 'Autenticação necessária.' })
     }
 
-    const body = e.requestInfo().body || {}
+    // PocketBase does not always parse the JSON request body into an object
+    // on `requestInfo().body` — it can arrive as a raw JSON string, a byte
+    // array or a buffer, which makes `body.origins`/`body.destinations`
+    // undefined. Parse the body manually before extracting any field.
+    let body = {}
+    try {
+      const rawBody = await e.requestInfo().body
+      if (typeof rawBody === 'string') {
+        body = JSON.parse(rawBody)
+      } else if (rawBody instanceof Uint8Array || rawBody instanceof ArrayBuffer) {
+        body = JSON.parse(new TextDecoder().decode(rawBody))
+      } else if (rawBody && typeof rawBody === 'object') {
+        body = rawBody
+      }
+    } catch (err) {
+      console.log('[maps_proxy] Erro ao parsear body:', err)
+      return e.json(400, { ok: false, error: 'Body inválido.' })
+    }
+
     const origins = (body.origins || '').toString().trim()
     const destinations = (body.destinations || '').toString().trim()
     if (!origins || !destinations) {
+      console.log('[maps_proxy] Body recebido:', JSON.stringify(body))
       return e.json(400, { ok: false, error: 'Origens e destinos são obrigatórios.' })
     }
 

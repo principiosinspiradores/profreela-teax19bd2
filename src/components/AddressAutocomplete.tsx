@@ -18,9 +18,14 @@ export interface ParsedAddress {
 }
 
 interface AddressAutocompleteProps {
-  /** Controlled text value (the formatted address string). */
+  /**
+   * Initial/external address value. The input is UNCONTROLLED — Google Places
+   * owns the DOM value. This prop is only used to seed the input on mount and
+   * to keep it in sync when the parent changes it externally (e.g. a saved
+   * location button or the clear action). Never bind it to `value={...}`.
+   */
   value: string
-  /** Called whenever the raw input text changes (typing). */
+  /** Called when an address is selected from the dropdown or cleared. */
   onChange: (value: string) => void
   /** Called when the user selects a suggestion from the dropdown. */
   onSelect: (parsed: ParsedAddress) => void
@@ -138,12 +143,16 @@ export default function AddressAutocomplete({
           componentRestrictions: { country: 'br' },
           fields: ['address_components', 'formatted_address', 'geometry', 'name'],
         })
+        // Google Places owns the input. We only react to a selection via
+        // `place_changed` — we never control the typed value from React.
         autocompleteRef.current.addListener('place_changed', () => {
           const place = autocompleteRef.current.getPlace()
-          const parsed = parsePlace(place)
-          if (parsed) {
-            onChange(parsed.formattedAddress || value)
-            onSelect(parsed)
+          if (place && place.formatted_address) {
+            const parsed = parsePlace(place)
+            if (parsed) {
+              onChange(parsed.formattedAddress)
+              onSelect(parsed)
+            }
           }
         })
       })
@@ -159,6 +168,15 @@ export default function AddressAutocomplete({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [apiKey])
 
+  // Keep the DOM input in sync with the `value` prop when it changes
+  // externally (saved-location button, clear action) — imperatively, never
+  // via `value={...}`. Google Places stays in full control of the typed text.
+  useEffect(() => {
+    if (inputRef.current && inputRef.current.value !== value) {
+      inputRef.current.value = value
+    }
+  }, [value])
+
   const clear = useCallback(() => {
     onChange('')
     if (inputRef.current) inputRef.current.value = ''
@@ -172,8 +190,7 @@ export default function AddressAutocomplete({
         type="text"
         className="flex h-10 w-full rounded-md border border-input bg-background px-9 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
         placeholder={placeholder}
-        defaultValue={value}
-        onChange={(e) => onChange(e.target.value)}
+        defaultValue=""
         autoComplete="off"
         required={required}
       />
