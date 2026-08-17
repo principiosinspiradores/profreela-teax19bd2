@@ -264,6 +264,13 @@ routerAdd(
         newScheduledAt = buildMinus3Iso(nowMs)
       }
 
+      // Preserve the original duration, but normalize a missing/zero `hours`
+      // (legacy jobs created before the scheduling system defaulted to 0) to a
+      // 1-hour minimum so the reopened job is actually acceptable.
+      const originalHours = job.getFloat('hours')
+      const normalizedHours = originalHours > 0 ? originalHours : 1
+      job.set('hours', normalizedHours)
+
       job.set('status', 'pending')
       job.set('pro_id', '')
       job.set('accepted_at', '')

@@ -71,7 +71,11 @@ onRecordUpdateRequest((e) => {
   // pro accept several jobs on the same day without any overlap check. Instead
   // reject: a service must have a scheduled date/time and a duration before it
   // can be accepted, otherwise the conflict window cannot be computed.
-  if (!scheduledAt || !hours || hours <= 0) {
+  // `getFloat` returns 0 both for an absent field and for an explicit `0`, so
+  // `!hours` (falsy) wrongly reads the same as "missing". Reject only when the
+  // duration is truly absent, zero or negative — a valid positive duration
+  // must pass so jobs scheduled with a real `hours` value can be accepted.
+  if (!scheduledAt || hours == null || hours <= 0) {
     return e.json(400, {
       code: 400,
       message: 'Dados incompletos: o serviço precisa ter data e horário definidos.',

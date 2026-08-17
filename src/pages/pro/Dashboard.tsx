@@ -121,7 +121,10 @@ export default function ProDashboard() {
       return true
     })
 
-    const pending = visibleJobs.find((j) => j.status === 'pending')
+    // Exclude jobs with no valid duration (hours <= 0): they are legacy/zombie
+    // records that can't be accepted (the backend rejects them as incomplete),
+    // so showing them as an offer only leads to a confusing error.
+    const pending = visibleJobs.find((j) => j.status === 'pending' && Number(j.hours || 0) > 0)
     if (pending && pending.id !== pendingJob?.id) {
       setPendingJob(pending)
     }
