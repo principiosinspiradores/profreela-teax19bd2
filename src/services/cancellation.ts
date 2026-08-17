@@ -72,6 +72,7 @@ export interface CancelJobResult {
   payment_status?: string
   cancellation_id?: string
   suspended: boolean
+  blocked_until?: string
   monthly_cancellations: number
   monthly_limit: number
   reopened?: boolean

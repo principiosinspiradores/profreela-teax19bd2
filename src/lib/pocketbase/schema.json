@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-17T12:17:01.992Z",
+  "generatedAt": "2026-08-17T13:18:45.825Z",
   "collections": [
     {
       "name": "users",
@@ -91,6 +91,12 @@
         {
           "name": "rating_count",
           "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "blocked_until",
+          "type": "date",
           "required": false,
           "system": false
         }

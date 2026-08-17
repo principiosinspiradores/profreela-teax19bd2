@@ -39,6 +39,32 @@ onRecordUpdateRequest((e) => {
     return
   }
 
+  // A pro blocked for cancelling a previously-accepted job cannot accept any
+  // job until `blocked_until` is in the past.
+  try {
+    const proUser = $app.findFirstRecordByData('users', 'id', proId)
+    if (proUser) {
+      const blockedUntilStr = proUser.getString('blocked_until')
+      if (blockedUntilStr) {
+        const blockedMs = new Date(blockedUntilStr).getTime()
+        const nowMs = Date.now()
+        if (!isNaN(blockedMs) && blockedMs > nowMs) {
+          const hoursLeft = Math.ceil((blockedMs - nowMs) / 3600000)
+          return e.json(403, {
+            code: 403,
+            message:
+              'Você está temporariamente bloqueado por ter cancelado um serviço. Disponível novamente em ' +
+              hoursLeft +
+              ' hora(s).',
+            data: { blocked: true, blocked_until: blockedUntilStr, hours_left: hoursLeft },
+          })
+        }
+      }
+    }
+  } catch (_) {
+    // If we can't load the pro, don't block acceptance.
+  }
+
   const scheduledAt = record.getString('scheduled_at')
   const hours = record.getFloat('hours')
   // Do NOT skip validation when the time window is missing — that would let a

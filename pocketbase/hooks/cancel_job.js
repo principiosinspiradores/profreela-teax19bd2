@@ -110,7 +110,7 @@ routerAdd(
     // Used when a reopened job's original slot is already in the past and must
     // be pushed forward to "now" while preserving the -03:00 offset.
     const buildMinus3Iso = function (ms) {
-      const local = new Date(ms + 3 * 3600000) // shift UTC → Brasília wall-clock
+      const local = new Date(ms - 3 * 3600000) // shift UTC → Brasília wall-clock
       const pad = function (n) {
         n = String(n)
         return n.length < 2 ? '0' + n : n
@@ -312,6 +312,25 @@ routerAdd(
       console.log('[cancel-job] falha ao registrar cancellation:', err)
     }
 
+    // --- professional cancelling accepted job → 24h accept block ----------
+    //
+    // A pro who cancels a job they had already accepted is blocked from
+    // accepting ANY job for 24h (blocked_until). This discourages the practice
+    // of dropping a job because a better-paying one appeared. Only applied on
+    // the reopen path (accepted job cancelled by its pro) — the suspension
+    // below still handles serial offenders.
+    let blockedUntil = ''
+    if (isProReopen && proId) {
+      try {
+        const proRecord = $app.findFirstRecordByData('users', 'id', proId)
+        blockedUntil = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()
+        proRecord.set('blocked_until', blockedUntil)
+        $app.save(proRecord)
+      } catch (err) {
+        console.log('[cancel-job] falha ao bloquear profissional (blocked_until):', err)
+      }
+    }
+
     // --- professional reincidence → auto suspend ---------------------------
     let suspended = false
     let monthlyCount = 0
@@ -434,9 +453,16 @@ routerAdd(
         const reopenedTitle = 'Nova solicitação disponível (reaberta)'
         const reopenedMsg =
           'Uma solicitação de ' + serviceName + ' foi reaberta e está disponível para ' + whenLabel
+        const nowMsNotif = Date.now()
         for (let i = 0; i < pros.length; i++) {
           const pro = pros[i]
           if (pro.getBool('suspended')) continue
+          // Pros blocked for cancelling an accepted job don't get job offers.
+          const blockedUntilStr = pro.getString('blocked_until')
+          if (blockedUntilStr) {
+            const blockedMs = new Date(blockedUntilStr).getTime()
+            if (!isNaN(blockedMs) && blockedMs > nowMsNotif) continue
+          }
           const proId2 = pro.getString('id')
           if (!proId2 || proId2 === customerId || proId2 === authId) continue
           createNotif(proId2, 'new_job', reopenedTitle, reopenedMsg)
@@ -466,6 +492,7 @@ routerAdd(
       payment_status: job.getString('payment_status'),
       cancellation_id: cancellationId,
       suspended: suspended,
+      blocked_until: blockedUntil,
       monthly_cancellations: monthlyCount,
       monthly_limit: policy.pro_monthly_limit,
       reopened: reopened,

@@ -1,5 +1,15 @@
-import { useState, useEffect } from 'react'
-import { MapPin, Clock, AlertCircle, Wallet, Ban, Loader2, CalendarClock } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import {
+  MapPin,
+  Clock,
+  AlertCircle,
+  Wallet,
+  Ban,
+  Loader2,
+  CalendarClock,
+  Hourglass,
+} from 'lucide-react'
+import pb from '@/lib/pocketbase/client'
 import { ClientResponseError } from 'pocketbase'
 import { getErrorMessage } from '@/lib/pocketbase/errors'
 import { Button } from '@/components/ui/button'
@@ -63,6 +73,17 @@ export default function ProDashboard() {
   const [cancelReason, setCancelReason] = useState('')
   const [cancelling, setCancelling] = useState(false)
 
+  const navigate = useNavigate()
+  const { user } = useAuth()
+  const { toast } = useToast()
+
+  // Live `blocked_until` of the current pro (kept in a ref so the countdown
+  // re-derives on every tick without a re-fetch).
+  const blockedUntilRef = useRef<string>((user?.blocked_until as string) || '')
+  useEffect(() => {
+    blockedUntilRef.current = (user?.blocked_until as string) || ''
+  }, [user])
+
   const loadData = async () => {
     if (!user) return
     getSettings()
@@ -74,20 +95,45 @@ export default function ProDashboard() {
     const docs = await getUserDocuments(user.id)
     setDocuments(docs)
 
+    // Refresh the current pro's record so `blocked_until` is up to date (the
+    // auth store copy may be stale after a cancel-reopen). Falls back to the
+    // auth-store record if the fetch fails.
+    let currentPro: any = user
+    try {
+      currentPro = await pb.collection('users').getOne(user.id)
+    } catch {
+      currentPro = user
+    }
+    if (currentPro && currentPro.blocked_until !== blockedUntilRef.current) {
+      blockedUntilRef.current = currentPro.blocked_until || ''
+    }
+
     const jobs = await getProJobs(user.id)
-    const pending = jobs.find((j) => j.status === 'pending')
+
+    // Hide reopened jobs that the current pro cancelled within the last 24h —
+    // they shouldn't reappear to the pro who dropped them.
+    const nowMs = Date.now()
+    const visibleJobs = jobs.filter((j: any) => {
+      if (j.reopened && j.cancelled_by === user.id) {
+        const cancelledMs = j.cancelled_at ? new Date(j.cancelled_at).getTime() : 0
+        if (cancelledMs && nowMs - cancelledMs < 24 * 60 * 60 * 1000) return false
+      }
+      return true
+    })
+
+    const pending = visibleJobs.find((j) => j.status === 'pending')
     if (pending && pending.id !== pendingJob?.id) {
       setPendingJob(pending)
     }
     setCompletedJobs(
-      jobs.filter(
+      visibleJobs.filter(
         (j) =>
           j.pro_id === user.id &&
           ['completed'].includes(j.status) &&
           ['held', 'disputed', 'authorized'].includes(j.payment_status || ''),
       ),
     )
-    setAcceptedJobs(jobs.filter((j) => j.pro_id === user.id && j.status === 'accepted'))
+    setAcceptedJobs(visibleJobs.filter((j) => j.pro_id === user.id && j.status === 'accepted'))
 
     // Monthly reincidence counter (this calendar month).
     try {
@@ -141,6 +187,7 @@ export default function ProDashboard() {
           title: 'Serviço reaberto',
           description:
             (res.penalty_amount > 0 ? res.penalty_label + '. ' : '') +
+            (res.blocked_until ? 'Você foi bloqueado por 24h para aceitar novos serviços. ' : '') +
             'O serviço foi reaberto e outros profissionais serão notificados.',
         })
       } else {
@@ -164,16 +211,23 @@ export default function ProDashboard() {
     }
   }
 
-  const navigate = useNavigate()
-  const { user } = useAuth()
-  const { toast } = useToast()
-
   useEffect(() => {
     loadData()
   }, [user, isOnline])
 
   useRealtime('jobs', loadData, isOnline)
   useRealtime('documents', loadData)
+
+  // Whether the current pro is currently blocked from accepting jobs.
+  const blockedUntilMs = blockedUntilRef.current ? new Date(blockedUntilRef.current).getTime() : 0
+  const isBlocked = !isNaN(blockedUntilMs) && blockedUntilMs > Date.now()
+
+  const formatBlockCountdown = (ms: number) => {
+    const diff = Math.max(0, ms - Date.now())
+    const hours = Math.floor(diff / 3600000)
+    const minutes = Math.floor((diff % 3600000) / 60000)
+    return hours + 'h ' + minutes + 'min'
+  }
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.length || !user) return
@@ -208,23 +262,36 @@ export default function ProDashboard() {
       setPendingJob(null)
       navigate(`/pro/job/${pendingJob.id}`)
     } catch (err) {
-      // A 409 from the accept_job hook means a scheduling conflict; a 400 means
-      // the job is missing the scheduled date/time or duration needed for the
-      // conflict check.
+      // 409 → scheduling conflict; 400 → missing scheduled date/duration;
+      // 403 → pro is blocked from accepting (24h cooldown after cancelling).
       const isConflict = err instanceof ClientResponseError && err.status === 409
       const isIncomplete = err instanceof ClientResponseError && err.status === 400
+      const isBlockedErr = err instanceof ClientResponseError && err.status === 403
       const description = isConflict
         ? getErrorMessage(err) ||
           'Você já tem um serviço agendado para este horário. Conclua ou cancele o serviço atual antes de aceitar outro.'
         : isIncomplete
           ? getErrorMessage(err) ||
             'Dados incompletos: o serviço precisa ter data e horário definidos.'
-          : 'Não foi possível aceitar a solicitação.'
+          : isBlockedErr
+            ? getErrorMessage(err) ||
+              'Você está temporariamente bloqueado por ter cancelado um serviço.'
+            : 'Não foi possível aceitar a solicitação.'
       toast({
-        title: isConflict ? 'Conflito de horário' : isIncomplete ? 'Dados incompletos' : 'Erro',
+        title: isConflict
+          ? 'Conflito de horário'
+          : isIncomplete
+            ? 'Dados incompletos'
+            : isBlockedErr
+              ? 'Bloqueado'
+              : 'Erro',
         description,
         variant: 'destructive',
       })
+      // Refresh the pro record so the block banner shows up immediately.
+      if (isBlockedErr) {
+        loadData()
+      }
     } finally {
       setAccepting(false)
     }
@@ -341,6 +408,19 @@ export default function ProDashboard() {
 
       {/* Bottom Info Card */}
       <div className="relative z-10 mt-auto m-4 space-y-3">
+        {isBlocked && (
+          <Alert
+            variant="destructive"
+            className="shadow-xl border-amber-300 bg-amber-50 text-amber-900"
+          >
+            <Hourglass className="h-4 w-4" />
+            <AlertTitle>Bloqueio temporário de 24h</AlertTitle>
+            <AlertDescription>
+              Você cancelou um serviço recentemente. Disponível novamente para aceitar novos
+              serviços em <strong>{formatBlockCountdown(blockedUntilMs)}</strong>.
+            </AlertDescription>
+          </Alert>
+        )}
         {acceptedJobs.length > 0 && (
           <Card className="shadow-xl border-white/50 bg-white/95 backdrop-blur">
             <CardContent className="p-4 space-y-3">
@@ -525,7 +605,7 @@ export default function ProDashboard() {
             <Button
               className="w-full h-12 bg-secondary hover:bg-secondary/90 text-white"
               onClick={acceptJob}
-              disabled={accepting}
+              disabled={accepting || isBlocked}
             >
               {accepting ? (
                 <>

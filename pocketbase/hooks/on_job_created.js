@@ -99,9 +99,16 @@ onRecordAfterCreateSuccess((e) => {
     return
   }
 
+  const nowMsCreated = Date.now()
   for (let i = 0; i < pros.length; i++) {
     const pro = pros[i]
     if (pro.getBool('suspended')) continue
+    // Pros blocked for cancelling an accepted job don't get job offers.
+    const blockedUntilStr = pro.getString('blocked_until')
+    if (blockedUntilStr) {
+      const blockedMs = new Date(blockedUntilStr).getTime()
+      if (!isNaN(blockedMs) && blockedMs > nowMsCreated) continue
+    }
     const proId = pro.getString('id')
     if (!proId || proId === customerId) continue
 
