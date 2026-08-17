@@ -17,7 +17,19 @@ routerAdd(
       return e.json(401, { ok: false, error: 'Autenticação necessária.' })
     }
 
-    const body = e.requestInfo().body || {}
+    // PocketBase does not always parse the JSON request body into an object
+    // on `requestInfo().body` — it can arrive as a raw JSON string, which
+    // makes `body.address` undefined and trips our own "Endereço é
+    // obrigatório." validation. Parse the body manually before extracting.
+    let body
+    try {
+      body =
+        typeof e.requestInfo().body === 'string'
+          ? JSON.parse(e.requestInfo().body)
+          : e.requestInfo().body || {}
+    } catch (_) {
+      body = {}
+    }
     const address = (body.address || '').toString().trim()
     if (!address) {
       return e.json(400, { ok: false, error: 'Endereço é obrigatório.' })

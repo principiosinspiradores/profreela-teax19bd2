@@ -43,7 +43,7 @@ export default function RequestService() {
   const [type, setType] = useState('scheduled')
   const [services, setServices] = useState<any[]>([])
   const [selectedService, setSelectedService] = useState<string>('')
-  const [address, setAddress] = useState('Av. Aquidabã, 400 - Centro, Campinas')
+  const [address, setAddress] = useState('')
   const [hours, setHours] = useState(4)
   const [quantity, setQuantity] = useState(1)
   const [settings, setSettings] = useState<PlatformSettings>(DEFAULT_SETTINGS)
