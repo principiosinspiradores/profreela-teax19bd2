@@ -147,7 +147,9 @@ export default function ActiveJob() {
   const etaMs = nowMs + (distance ? distance.durationSeconds * 1000 : 0)
   const etaLabel = isNaN(etaMs)
     ? '--:--'
-    : pad2(new Date(etaMs).getHours()) + ':' + pad2(new Date(etaMs).getMinutes())
+    : pad2(new Date(etaMs - 3 * 3600000).getUTCHours()) +
+      ':' +
+      pad2(new Date(etaMs - 3 * 3600000).getUTCMinutes())
 
   let alert: { kind: 'leave' | 'warn' | 'ok' | null; title: string; description: string }
   if (!scheduledMs || !distance) {
@@ -282,8 +284,8 @@ export default function ActiveJob() {
 
   const clientName = job.expand?.customer_id?.name || 'Cliente'
   const serviceName = job.expand?.service_id?.name || 'Serviço'
-  const destLat = job.latitude ?? destination?.lat
-  const destLng = job.longitude ?? destination?.lng
+  const destLat = destination?.lat ?? job.latitude
+  const destLng = destination?.lng ?? job.longitude
   const hasCoords = typeof destLat === 'number' && typeof destLng === 'number'
 
   return (

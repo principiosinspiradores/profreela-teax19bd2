@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-17T15:15:33.607Z",
+  "generatedAt": "2026-08-17T18:11:32.269Z",
   "collections": [
     {
       "name": "users",
@@ -342,6 +342,12 @@
         {
           "name": "reopened",
           "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "started_at",
+          "type": "date",
           "required": false,
           "system": false
         }
