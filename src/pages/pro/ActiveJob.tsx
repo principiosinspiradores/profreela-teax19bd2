@@ -54,6 +54,7 @@ export default function ActiveJob() {
   const [job, setJob] = useState<any>(null)
   const [loadingJob, setLoadingJob] = useState(true)
   const [destination, setDestination] = useState<GeocodeResult | null>(null)
+  const [usingFallback, setUsingFallback] = useState(false)
   const [distance, setDistance] = useState<DistanceResult | null>(null)
   const [embedUrl, setEmbedUrl] = useState<string | null>(null)
   const [step, setStep] = useState<Step>('transit')
@@ -103,13 +104,25 @@ export default function ActiveJob() {
   useEffect(() => {
     if (!job?.address) return
     let cancelled = false
+    setUsingFallback(false)
     geocodeAddress(job.address).then((res) => {
       if (cancelled) return
-      setDestination(res)
-      // Persist the resolved coordinates back onto the job so the deep link
-      // keeps working even if geocoding later fails.
-      if (res && job?.id && job.latitude == null) {
-        updateJob(job.id, { latitude: res.lat, longitude: res.lng }).catch(() => {})
+      if (res) {
+        setDestination(res)
+        setUsingFallback(false)
+        // Persist the resolved coordinates back onto the job so the deep link
+        // keeps working even if geocoding later fails.
+        if (job?.id && job.latitude == null) {
+          updateJob(job.id, { latitude: res.lat, longitude: res.lng }).catch(() => {})
+        }
+      } else if (typeof job.latitude === 'number' && typeof job.longitude === 'number') {
+        // Geocode failed (network error, invalid key, etc.) — fall back to the
+        // coordinates saved on the job so the map and distance still work.
+        setDestination({ lat: job.latitude, lng: job.longitude })
+        setUsingFallback(true)
+      } else {
+        setDestination(null)
+        setUsingFallback(false)
       }
     })
     return () => {
@@ -367,6 +380,13 @@ export default function ActiveJob() {
               )}
             </div>
           </div>
+
+          {usingFallback && (
+            <div className="flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-1.5">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+              <span>Usando endereço cadastrado — a localização no mapa pode ser aproximada.</span>
+            </div>
+          )}
 
           {/* Leave-now / warning alert */}
           {step === 'transit' && alert.kind && (
