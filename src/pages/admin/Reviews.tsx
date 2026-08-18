@@ -14,7 +14,7 @@ import {
 import { Loader2, Star, Search, Trash2 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import pb from '@/lib/pocketbase/client'
-import { RatingStars } from '@/components/RatingStars'
+import { cn } from '@/lib/utils'
 
 type Review = {
   id: string
@@ -218,7 +218,19 @@ export default function AdminReviews() {
                         {r.expand?.recipient_id?.name || r.expand?.recipient_id?.email || '-'}
                       </TableCell>
                       <TableCell>
-                        <RatingStars avg={Number(r.rating)} count={0} showCount={false} />
+                        <div className="flex items-center gap-0.5">
+                          {[1, 2, 3, 4, 5].map((n) => (
+                            <Star
+                              key={n}
+                              className={cn(
+                                'h-3.5 w-3.5',
+                                n <= Number(r.rating)
+                                  ? 'fill-amber-400 text-amber-400'
+                                  : 'text-muted-foreground/30',
+                              )}
+                            />
+                          ))}
+                        </div>
                       </TableCell>
                       <TableCell className="max-w-xs text-sm text-muted-foreground">
                         {r.comment ? (
