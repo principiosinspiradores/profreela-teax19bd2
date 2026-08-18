@@ -23,6 +23,7 @@ import AdminDashboard from './pages/admin/Dashboard'
 import AdminSettings from './pages/admin/Settings'
 import AdminUsers from './pages/admin/Users'
 import AdminPricing from './pages/admin/Pricing'
+import AdminReviews from './pages/admin/Reviews'
 
 // Route guard: only allows authenticated users with one of `allowedRoles`.
 // Visitors (guests) are sent to the landing page; authenticated users with a
@@ -150,6 +151,14 @@ const AppRoutes = () => (
         element={
           <ProtectedRoute allowedRoles={['admin']}>
             <AdminPricing />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/reviews"
+        element={
+          <ProtectedRoute allowedRoles={['admin']}>
+            <AdminReviews />
           </ProtectedRoute>
         }
       />

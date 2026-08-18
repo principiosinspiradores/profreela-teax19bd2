@@ -10,14 +10,22 @@ import {
   Loader2,
   User,
   MapPinned,
+  ShieldAlert,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useToast } from '@/hooks/use-toast'
-import { getJob, updateJob, startJob } from '@/services/api'
-import { releasePayment } from '@/services/checkout'
+import { getJob, updateJob, startJob, finishJob } from '@/services/api'
 import {
   geocodeAddress,
   getDistance,
@@ -28,8 +36,16 @@ import {
 } from '@/services/googleMaps'
 import { useGeolocation } from '@/hooks/useGeolocation'
 import { formatScheduledSlot } from '@/lib/scheduling'
+import {
+  GEOFENCE_RADIUS_M,
+  haversineMeters,
+  isWithinGeofence,
+  uploadJobPhoto,
+  hasJobPhoto,
+} from '@/services/jobPhotos'
+import { PhotoCapture } from '@/components/PhotoCapture'
 
-type Step = 'transit' | 'arrived' | 'working' | 'finished'
+type Step = 'transit' | 'arrived' | 'start_photo' | 'working' | 'end_photo' | 'finished'
 
 const LEAVE_NOW_THRESHOLD_MIN = 0 // travel time >= remaining time -> "leave now"
 const WARNING_THRESHOLD_MIN = 5 // remaining - travel < 5min -> "leave in X min"
@@ -60,45 +76,50 @@ export default function ActiveJob() {
   const [step, setStep] = useState<Step>('transit')
   const [finishing, setFinishing] = useState(false)
   const [starting, setStarting] = useState(false)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [startPhotoReady, setStartPhotoReady] = useState(false)
+  const [endPhotoReady, setEndPhotoReady] = useState(false)
+  const [photoDialog, setPhotoDialog] = useState<null | 'start' | 'end'>(null)
 
-  // GPS tracking — only active during the transit step.
-  const { coords, error: geoError, loading: geoLoading } = useGeolocation(step === 'transit')
+  // GPS tracking — active during transit, arrival and the working/finish steps
+  // so the geofence gate can be evaluated live.
+  const geoEnabled =
+    step === 'transit' ||
+    step === 'arrived' ||
+    step === 'start_photo' ||
+    step === 'working' ||
+    step === 'end_photo'
+  const { coords, error: geoError, loading: geoLoading } = useGeolocation(geoEnabled)
 
   // Throttle distance/embed refresh so we don't spam the proxy on every GPS tick.
   const lastRefreshRef = useRef(0)
 
   // --- load job -------------------------------------------------------------
-  useEffect(() => {
+  const loadJob = useCallback(async () => {
     if (!jobId) return
-    let cancelled = false
     setLoadingJob(true)
-    getJob(jobId)
-      .then((j) => {
-        if (cancelled) return
-        setJob(j)
-        // If the job is already in_progress, jump straight to working.
-        if (j?.status === 'in_progress') {
-          setStep('working')
-        } else if (j?.status === 'completed') {
-          setStep('finished')
-        }
+    try {
+      const j = await getJob(jobId)
+      setJob(j)
+      if (j?.status === 'in_progress') {
+        setStep('working')
+      } else if (j?.status === 'completed') {
+        setStep('finished')
+      }
+    } catch {
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível carregar o serviço.',
+        variant: 'destructive',
       })
-      .catch(() => {
-        if (!cancelled) {
-          toast({
-            title: 'Erro',
-            description: 'Não foi possível carregar o serviço.',
-            variant: 'destructive',
-          })
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingJob(false)
-      })
-    return () => {
-      cancelled = true
+    } finally {
+      setLoadingJob(false)
     }
-  }, [jobId])
+  }, [jobId, toast])
+
+  useEffect(() => {
+    loadJob()
+  }, [loadJob])
 
   // --- geocode the job address once ----------------------------------------
   useEffect(() => {
@@ -130,6 +151,17 @@ export default function ActiveJob() {
     }
   }, [job?.address])
 
+  // --- check whether the required evidence photos already exist -------------
+  useEffect(() => {
+    if (!jobId) return
+    hasJobPhoto(jobId, 'start')
+      .then(setStartPhotoReady)
+      .catch(() => setStartPhotoReady(false))
+    hasJobPhoto(jobId, 'end')
+      .then(setEndPhotoReady)
+      .catch(() => setEndPhotoReady(false))
+  }, [jobId, step])
+
   // --- refresh distance + embed as GPS moves -------------------------------
   const refreshRoute = useCallback(async (lat: number, lng: number, dest: GeocodeResult) => {
     const originStr = `${lat},${lng}`
@@ -151,7 +183,17 @@ export default function ActiveJob() {
     refreshRoute(coords.latitude, coords.longitude, destination)
   }, [coords, destination, refreshRoute, distance])
 
-  // --- derived values for the leave-now alert ------------------------------
+  // --- derived values -------------------------------------------------------
+  const destLat = destination?.lat ?? job?.latitude
+  const destLng = destination?.lng ?? job?.longitude
+  const jobCoords =
+    typeof destLat === 'number' && typeof destLng === 'number'
+      ? { lat: destLat as number, lng: destLng as number }
+      : null
+
+  const withinGeofence = isWithinGeofence(coords, jobCoords)
+  const metersAway = coords && jobCoords ? Math.round(haversineMeters(coords, jobCoords)) : null
+
   const scheduledMs = job?.scheduled_at ? new Date(job.scheduled_at).getTime() : 0
   const nowMs = Date.now()
   const remainingMs = scheduledMs ? scheduledMs - nowMs : 0
@@ -195,11 +237,91 @@ export default function ActiveJob() {
   }
 
   // --- actions --------------------------------------------------------------
+  const handleArrived = () => {
+    // GPS check-in: within the 50m geofence of the destination, or geolocation
+    // unavailable (let the pro proceed — the backend gate + photo still apply).
+    if (coords && jobCoords && !withinGeofence) {
+      toast({
+        title: 'Ainda não',
+        description: `Você precisa estar a menos de ${GEOFENCE_RADIUS_M}m do local para fazer check-in. (Distância atual: ~${metersAway}m)`,
+        variant: 'destructive',
+      })
+      return
+    }
+    setStep('arrived')
+  }
+
+  const handleStartPhoto = () => {
+    // Require being inside the geofence before opening the camera.
+    if (coords && jobCoords && !withinGeofence) {
+      toast({
+        title: 'Fora da área',
+        description: 'Você precisa estar no local para iniciar o serviço.',
+        variant: 'destructive',
+      })
+      return
+    }
+    setPhotoDialog('start')
+  }
+
+  const handleEndPhoto = () => {
+    if (coords && jobCoords && !withinGeofence) {
+      toast({
+        title: 'Fora da área',
+        description: 'Você precisa estar no local para finalizar o serviço.',
+        variant: 'destructive',
+      })
+      return
+    }
+    setPhotoDialog('end')
+  }
+
+  const handlePhotoCaptured = async (file: File) => {
+    if (!jobId || !photoDialog) return
+    setUploadingPhoto(true)
+    try {
+      await uploadJobPhoto(jobId, photoDialog, file)
+      if (photoDialog === 'start') setStartPhotoReady(true)
+      if (photoDialog === 'end') setEndPhotoReady(true)
+      toast({
+        title: 'Foto enviada',
+        description: 'Evidência registrada com sucesso.',
+      })
+      setPhotoDialog(null)
+    } catch (err: any) {
+      toast({
+        title: 'Erro',
+        description: err?.message || 'Não foi possível enviar a foto.',
+        variant: 'destructive',
+      })
+    } finally {
+      setUploadingPhoto(false)
+    }
+  }
+
   const handleStart = async () => {
     if (!jobId || starting) return
+    // Client-side geofence gate (mirrors the backend check).
+    if (coords && jobCoords && !withinGeofence) {
+      toast({
+        title: 'Fora da área',
+        description: 'Você precisa estar no local para iniciar o serviço.',
+        variant: 'destructive',
+      })
+      return
+    }
+    if (!startPhotoReady) {
+      toast({
+        title: 'Foto obrigatória',
+        description: 'Tire a foto de evidência no local antes de iniciar o serviço.',
+        variant: 'destructive',
+      })
+      setStep('start_photo')
+      return
+    }
     setStarting(true)
     try {
-      const updated = await startJob(jobId)
+      const updated = await startJob(jobId, coords || undefined)
       setJob({ ...job, ...(updated || {}), status: 'in_progress' })
       toast({
         title: 'Serviço iniciado',
@@ -217,56 +339,38 @@ export default function ActiveJob() {
     }
   }
 
-  const handleArrived = () => {
-    // GPS check-in: within ~150m of the destination, or geolocation unavailable
-    // (let the pro proceed — the backend gate is the clock-in below).
-    const withinRange = !coords || !destination ? true : haversineMeters(coords, destination) <= 150
-    if (!withinRange) {
+  const handleFinish = async () => {
+    if (!jobId || finishing) return
+    // Client-side geofence gate (mirrors the backend check).
+    if (coords && jobCoords && !withinGeofence) {
       toast({
-        title: 'Ainda não',
-        description: 'Você precisa estar a menos de 150m do local para fazer check-in.',
+        title: 'Fora da área',
+        description: 'Você precisa estar no local para finalizar o serviço.',
         variant: 'destructive',
       })
       return
     }
-    setStep('arrived')
-  }
-
-  const handleCheckIn = async () => {
-    // clock-in — record timestamp so the 24h auto-cancel rule is satisfied.
-    if (jobId) {
-      try {
-        await updateJob(jobId, { clocked_in_at: new Date().toISOString() })
-      } catch (_) {
-        /* non-fatal */
-      }
+    if (!endPhotoReady) {
+      toast({
+        title: 'Foto obrigatória',
+        description: 'Tire a foto de evidência do trabalho concluído antes de finalizar.',
+        variant: 'destructive',
+      })
+      setStep('end_photo')
+      return
     }
-    toast({
-      title: 'Foto enviada',
-      description: 'Check-in validado via GPS com sucesso!',
-    })
-    setStep('working')
-  }
-
-  const handleFinish = async () => {
     setFinishing(true)
     try {
-      if (jobId) {
-        await updateJob(jobId, {
-          status: 'completed',
-          completed_at: new Date().toISOString(),
-        })
-        await releasePayment(jobId)
-        toast({
-          title: 'Serviço finalizado',
-          description: 'Iniciado o período de garantia de 7 dias. O pagamento será liberado após.',
-        })
-        navigate('/pro')
-      }
-    } catch {
+      await finishJob(jobId, coords || undefined)
+      toast({
+        title: 'Serviço finalizado',
+        description: 'Iniciado o período de garantia de 7 dias. O pagamento será liberado após.',
+      })
+      navigate('/pro')
+    } catch (err: any) {
       toast({
         title: 'Erro',
-        description: 'Não foi possível finalizar o serviço.',
+        description: err?.message || 'Não foi possível finalizar o serviço.',
         variant: 'destructive',
       })
     } finally {
@@ -297,9 +401,7 @@ export default function ActiveJob() {
 
   const clientName = job.expand?.customer_id?.name || 'Cliente'
   const serviceName = job.expand?.service_id?.name || 'Serviço'
-  const destLat = destination?.lat ?? job.latitude
-  const destLng = destination?.lng ?? job.longitude
-  const hasCoords = typeof destLat === 'number' && typeof destLng === 'number'
+  const hasCoords = !!jobCoords
 
   return (
     <div className="max-w-xl mx-auto w-full space-y-6">
@@ -388,6 +490,29 @@ export default function ActiveJob() {
             </div>
           )}
 
+          {/* Geofence status strip (shown from arrival onwards) */}
+          {step !== 'transit' && step !== 'finished' && (
+            <div
+              className={
+                'flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ' +
+                (withinGeofence
+                  ? 'border-green-200 bg-green-50 text-green-800'
+                  : 'border-amber-200 bg-amber-50 text-amber-800')
+              }
+            >
+              <MapPinned className="h-4 w-4 shrink-0" />
+              {coords && jobCoords ? (
+                <span>
+                  {withinGeofence
+                    ? `Você está no local (a ~${metersAway}m do destino).`
+                    : `Você está a ~${metersAway}m do destino. Aproxime-se (raio de ${GEOFENCE_RADIUS_M}m) para iniciar/finalizar.`}
+                </span>
+              ) : (
+                <span>Localizando você para validar a presença no local…</span>
+              )}
+            </div>
+          )}
+
           {/* Leave-now / warning alert */}
           {step === 'transit' && alert.kind && (
             <Alert
@@ -454,16 +579,73 @@ export default function ActiveJob() {
 
             {step === 'arrived' && (
               <div className="space-y-4 animate-fade-in">
+                {/* Evidence photo (start) */}
                 <div className="p-6 border-2 border-dashed rounded-xl flex flex-col items-center justify-center text-center bg-muted/30">
                   <Camera className="h-10 w-10 text-muted-foreground mb-3" />
-                  <p className="font-medium">Tire uma foto no local</p>
+                  <p className="font-medium">Foto de evidência no local</p>
                   <p className="text-sm text-muted-foreground mb-4">
-                    Obrigatório pela LGPD e segurança
+                    Obrigatória antes de iniciar o serviço (comprovação de presença).
                   </p>
-                  <Button variant="outline" onClick={handleCheckIn}>
-                    Simular Upload
-                  </Button>
+                  {startPhotoReady ? (
+                    <div className="flex items-center gap-2 text-secondary text-sm font-medium">
+                      <CheckCircle className="h-5 w-5" /> Foto registrada
+                    </div>
+                  ) : (
+                    <Button variant="outline" onClick={handleStartPhoto}>
+                      <Camera className="h-4 w-4 mr-2" /> Tirar foto
+                    </Button>
+                  )}
                 </div>
+
+                {job.status === 'accepted' && (
+                  <Button
+                    className="w-full h-12 bg-secondary hover:bg-secondary/90 text-white"
+                    onClick={handleStart}
+                    disabled={starting || !startPhotoReady}
+                  >
+                    {starting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Iniciando…
+                      </>
+                    ) : (
+                      'Iniciar Serviço'
+                    )}
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {step === 'start_photo' && (
+              <div className="space-y-4 animate-fade-in">
+                <div className="p-6 border-2 border-dashed rounded-xl flex flex-col items-center justify-center text-center bg-muted/30">
+                  <Camera className="h-10 w-10 text-muted-foreground mb-3" />
+                  <p className="font-medium">Foto de evidência no local</p>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Obrigatória antes de iniciar o serviço (comprovação de presença).
+                  </p>
+                  {startPhotoReady ? (
+                    <div className="flex items-center gap-2 text-secondary text-sm font-medium">
+                      <CheckCircle className="h-5 w-5" /> Foto registrada
+                    </div>
+                  ) : (
+                    <Button variant="outline" onClick={handleStartPhoto}>
+                      <Camera className="h-4 w-4 mr-2" /> Tirar foto
+                    </Button>
+                  )}
+                </div>
+                <Button
+                  className="w-full h-12 bg-secondary hover:bg-secondary/90 text-white"
+                  onClick={handleStart}
+                  disabled={starting || !startPhotoReady}
+                >
+                  {starting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Iniciando…
+                    </>
+                  ) : (
+                    'Iniciar Serviço'
+                  )}
+                </Button>
               </div>
             )}
 
@@ -483,10 +665,57 @@ export default function ActiveJob() {
                     liberado após esse prazo, caso não haja disputa.
                   </span>
                 </div>
+
+                {/* Evidence photo (end) */}
+                <div className="mb-6 p-6 border-2 border-dashed rounded-xl flex flex-col items-center justify-center text-center bg-muted/30 max-w-sm mx-auto">
+                  <Camera className="h-10 w-10 text-muted-foreground mb-3" />
+                  <p className="font-medium">Foto do trabalho concluído</p>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Obrigatória antes de finalizar o serviço (antes/depois).
+                  </p>
+                  {endPhotoReady ? (
+                    <div className="flex items-center gap-2 text-secondary text-sm font-medium">
+                      <CheckCircle className="h-5 w-5" /> Foto registrada
+                    </div>
+                  ) : (
+                    <Button variant="outline" onClick={handleEndPhoto}>
+                      <Camera className="h-4 w-4 mr-2" /> Tirar foto
+                    </Button>
+                  )}
+                </div>
+
                 <Button
                   className="w-full h-14 text-lg bg-slate-900"
                   onClick={handleFinish}
-                  disabled={finishing}
+                  disabled={finishing || !endPhotoReady}
+                >
+                  {finishing ? 'Finalizando...' : 'Finalizar Serviço'}
+                </Button>
+              </div>
+            )}
+
+            {step === 'end_photo' && (
+              <div className="space-y-4 animate-fade-in">
+                <div className="p-6 border-2 border-dashed rounded-xl flex flex-col items-center justify-center text-center bg-muted/30">
+                  <Camera className="h-10 w-10 text-muted-foreground mb-3" />
+                  <p className="font-medium">Foto do trabalho concluído</p>
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Obrigatória antes de finalizar o serviço (antes/depois).
+                  </p>
+                  {endPhotoReady ? (
+                    <div className="flex items-center gap-2 text-secondary text-sm font-medium">
+                      <CheckCircle className="h-5 w-5" /> Foto registrada
+                    </div>
+                  ) : (
+                    <Button variant="outline" onClick={handleEndPhoto}>
+                      <Camera className="h-4 w-4 mr-2" /> Tirar foto
+                    </Button>
+                  )}
+                </div>
+                <Button
+                  className="w-full h-14 text-lg bg-slate-900"
+                  onClick={handleFinish}
+                  disabled={finishing || !endPhotoReady}
                 >
                   {finishing ? 'Finalizando...' : 'Finalizar Serviço'}
                 </Button>
@@ -505,20 +734,52 @@ export default function ActiveJob() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Photo capture dialog */}
+      <Dialog
+        open={!!photoDialog}
+        onOpenChange={(o) => {
+          if (!o && !uploadingPhoto) setPhotoDialog(null)
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Camera className="h-5 w-5" />
+              {photoDialog === 'start' ? 'Foto de presença no local' : 'Foto do trabalho concluído'}
+            </DialogTitle>
+            <DialogDescription>
+              {photoDialog === 'start'
+                ? 'Tire uma foto como evidência de que você está no local do serviço.'
+                : 'Tire uma foto do trabalho concluído (antes/depois) como evidência.'}
+            </DialogDescription>
+          </DialogHeader>
+          <PhotoCapture
+            onCapture={handlePhotoCaptured}
+            autoConfirm
+            description={
+              photoDialog === 'start'
+                ? 'Comprovação de presença no local (obrigatória).'
+                : 'Comprovação do trabalho concluído (obrigatória).'
+            }
+          />
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setPhotoDialog(null)}
+              disabled={uploadingPhoto}
+            >
+              {uploadingPhoto ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Enviando…
+                </>
+              ) : (
+                'Fechar'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
-}
-
-/** Haversine distance in meters between two coordinates. */
-function haversineMeters(
-  a: { latitude: number; longitude: number },
-  b: { lat: number; lng: number },
-): number {
-  const R = 6371000
-  const dLat = ((b.lat - a.latitude) * Math.PI) / 180
-  const dLng = ((b.lng - a.longitude) * Math.PI) / 180
-  const lat1 = (a.latitude * Math.PI) / 180
-  const lat2 = (b.lat * Math.PI) / 180
-  const h = Math.sin(dLat / 2) ** 2 + Math.sin(dLng / 2) ** 2 * Math.cos(lat1) * Math.cos(lat2)
-  return 2 * R * Math.asin(Math.sqrt(h))
 }

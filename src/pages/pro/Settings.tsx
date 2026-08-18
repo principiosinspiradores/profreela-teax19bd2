@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { User, Loader2, Save, Star, ShieldAlert } from 'lucide-react'
+import { User, Loader2, Save, ShieldAlert } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -7,11 +7,8 @@ import { Label } from '@/components/ui/label'
 import { useAuth } from '@/hooks/use-auth'
 import { useToast } from '@/hooks/use-toast'
 import { updateUser } from '@/services/api'
-import { getProReviews } from '@/services/reviews'
 import { RatingStars } from '@/components/RatingStars'
 import { getAvatarUrl } from '@/lib/avatar'
-import { format } from 'date-fns'
-import { ptBR } from 'date-fns/locale'
 
 export default function ProSettings() {
   const { user } = useAuth()
@@ -19,15 +16,11 @@ export default function ProSettings() {
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [saving, setSaving] = useState(false)
-  const [reviews, setReviews] = useState<any[]>([])
 
   useEffect(() => {
     if (user) {
       setName(user.name || '')
       setPhone(user.phone || '')
-      getProReviews(user.id)
-        .then(setReviews)
-        .catch(() => {})
     }
   }, [user])
 
@@ -123,43 +116,10 @@ export default function ProSettings() {
         </CardContent>
       </Card>
 
-      {/* Reviews */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Star className="h-5 w-5 text-amber-500" /> Avaliações recebidas
-          </CardTitle>
-          <CardDescription>
-            {count > 0
-              ? `${count} avaliação(ões) — média ${avg.toFixed(1).replace('.', ',')}`
-              : 'Ainda não há avaliações.'}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {reviews.length === 0 ? (
-            <p className="text-muted-foreground text-sm">
-              Quando um cliente avaliar seu trabalho, a nota aparecerá aqui.
-            </p>
-          ) : (
-            reviews.map((r) => (
-              <div key={r.id} className="border-t pt-3 first:border-0 first:pt-0">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium text-sm">
-                    {r.expand?.author_id?.name || 'Cliente'}
-                  </span>
-                  <RatingStars avg={r.rating} count={0} showCount={false} />
-                </div>
-                {r.comment && <p className="text-sm text-muted-foreground mt-1">{r.comment}</p>}
-                {r.created && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {format(new Date(r.created), "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
-                  </p>
-                )}
-              </div>
-            ))
-          )}
-        </CardContent>
-      </Card>
+      <p className="text-sm text-muted-foreground text-center">
+        Suas avaliações recebidas são moderadas pela administração. A sua nota média continua
+        visível no seu perfil público.
+      </p>
     </div>
   )
 }

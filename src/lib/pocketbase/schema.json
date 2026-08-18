@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-17T22:40:30.561Z",
+  "generatedAt": "2026-08-18T19:26:15.881Z",
   "collections": [
     {
       "name": "users",
@@ -1161,6 +1161,54 @@
         }
       ],
       "indexes": ["CREATE INDEX idx_saved_locations_client ON saved_locations (client_id)"]
+    },
+    {
+      "name": "job_photos",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != ''",
+        "view": "@request.auth.id != ''",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.role = 'admin'",
+        "delete": "@request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "job_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "jobs"
+        },
+        {
+          "name": "type",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["start", "end"]
+        },
+        {
+          "name": "photo_file",
+          "type": "file",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": ["CREATE INDEX idx_job_photos_job ON job_photos (job_id)"]
     }
   ]
 }

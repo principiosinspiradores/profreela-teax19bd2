@@ -1,4 +1,4 @@
-import { Home, Briefcase, Settings, History, Users, BarChart3, Wallet } from 'lucide-react'
+import { Home, Briefcase, Settings, History, Users, BarChart3, Wallet, Star } from 'lucide-react'
 import { Link, useLocation } from 'react-router-dom'
 import {
   Sidebar,
@@ -38,6 +38,7 @@ export function AppSidebar() {
         return [
           { title: 'Visão Geral', url: '/admin', icon: BarChart3 },
           { title: 'Usuários', url: '/admin/users', icon: Users },
+          { title: 'Avaliações', url: '/admin/reviews', icon: Star },
           { title: 'Preços Dinâmicos', url: '/admin/pricing', icon: Wallet },
           { title: 'Configurações', url: '/admin/settings', icon: Settings },
         ]

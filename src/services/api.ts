@@ -64,14 +64,52 @@ export const getJob = (id: string) =>
  * Clock-in: transition an accepted job to `in_progress` through the
  * `/backend/v1/start-job` server endpoint. Verifies ownership + status and
  * stamps `started_at` / `clocked_in_at`. Returns the updated job record.
+ *
+ * The server enforces the 50m geofence (when latitude/longitude are provided)
+ * and requires a `start` evidence photo (job_photos) to exist for the job.
  */
-export async function startJob(jobId: string): Promise<any> {
+export async function startJob(
+  jobId: string,
+  coords?: { latitude: number; longitude: number },
+): Promise<any> {
   const res = await pb.send('/backend/v1/start-job', {
     method: 'POST',
-    body: { jobId },
+    body: {
+      jobId,
+      latitude: coords?.latitude,
+      longitude: coords?.longitude,
+    },
   })
   if (!res?.ok) {
-    throw new Error(res?.error || 'Não foi possível iniciar o serviço.')
+    const err = new Error(res?.error || 'Não foi possível iniciar o serviço.')
+    ;(err as any).code = res?.code
+    throw err
+  }
+  return res.job
+}
+
+/**
+ * Clock-out: transition an `in_progress` job to `completed` through the
+ * `/backend/v1/finish-job` server endpoint. Verifies ownership + status,
+ * enforces the 50m geofence (when coords provided) and requires an `end`
+ * evidence photo (job_photos). Starts the 7-day payment guarantee window.
+ */
+export async function finishJob(
+  jobId: string,
+  coords?: { latitude: number; longitude: number },
+): Promise<any> {
+  const res = await pb.send('/backend/v1/finish-job', {
+    method: 'POST',
+    body: {
+      jobId,
+      latitude: coords?.latitude,
+      longitude: coords?.longitude,
+    },
+  })
+  if (!res?.ok) {
+    const err = new Error(res?.error || 'Não foi possível finalizar o serviço.')
+    ;(err as any).code = res?.code
+    throw err
   }
   return res.job
 }
