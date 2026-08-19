@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   Ban,
   Star,
+  Users,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -34,6 +35,7 @@ import { getAvatarUrl } from '@/lib/avatar'
 import { PaymentStatusBadge } from '@/components/PaymentStatusBadge'
 import { DisputeDialog } from '@/components/DisputeDialog'
 import { createSplitPayment, releasePayment, type PaymentState } from '@/services/checkout'
+import { useDashboardStats } from '@/hooks/use-dashboard-stats'
 import {
   getCancellationPolicy,
   cancelJob,
@@ -60,6 +62,7 @@ function serviceEmoji(name?: string): string | null {
 export default function ClientDashboard() {
   const { user } = useAuth()
   const { toast } = useToast()
+  const stats = useDashboardStats(user?.id)
   const [jobs, setJobs] = useState<any[]>([])
   const [banners, setBanners] = useState<any[]>([])
   const [pros, setPros] = useState<any[]>([])
@@ -220,47 +223,89 @@ export default function ClientDashboard() {
         </Card>
       </div>
 
-      {/* Map of Nearby Pros */}
-      <Card className="overflow-hidden">
-        <CardHeader className="bg-slate-50 pb-4 border-b">
+      {/* Professionals availability summary card */}
+      <Card className="shadow-sm">
+        <CardHeader className="pb-3">
           <CardTitle className="text-lg flex items-center gap-2">
-            <MapPin className="h-5 w-5 text-primary" /> Profissionais Próximos (Google Maps)
+            <Users className="h-5 w-5 text-primary" /> Profissionais Disponíveis
           </CardTitle>
         </CardHeader>
-        <CardContent className="p-0">
-          <div className="h-72 bg-slate-200 relative w-full">
-            <img
-              src="https://img.usecurling.com/p/1000/400?q=street%20map"
-              alt="Google Maps Mock"
-              className="w-full h-full object-cover opacity-60 mix-blend-multiply"
-            />
-            {pros.map((pro, i) => (
-              <div
-                key={pro.id}
-                className="absolute flex flex-col items-center transform -translate-x-1/2 -translate-y-full transition-all duration-1000"
-                style={{
-                  top: `${40 + i * 15}%`,
-                  left: `${30 + i * 20}%`,
-                }}
-              >
-                <div className="bg-primary text-white text-[10px] px-2 py-0.5 rounded-full mb-1 shadow-sm font-bold whitespace-nowrap">
-                  {pro.name?.split(' ')[0] || 'Pro'}
+        <CardContent className="space-y-4">
+          {stats.loading ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3" aria-busy="true">
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i} className="h-16 rounded-xl bg-muted animate-pulse" />
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {/* Available professionals */}
+              <div className="flex items-center gap-3 rounded-xl border bg-muted/30 p-4">
+                <div className="bg-primary/10 p-2.5 rounded-lg">
+                  <Users className="h-5 w-5 text-primary" />
                 </div>
-                <div className="w-8 h-8 rounded-full border-2 border-primary overflow-hidden shadow-lg bg-white">
-                  <img src={getAvatarUrl(pro, 128)} className="w-full h-full object-cover" />
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground">Disponíveis</p>
+                  <p className="text-lg font-bold text-primary">
+                    {stats.error ? '--' : (stats.data?.availableCount ?? 0)}
+                  </p>
                 </div>
-                {Number(pro.rating_count) > 0 && (
-                  <div className="bg-amber-400 text-white text-[10px] px-1.5 py-0.5 rounded-full -mt-1 shadow-sm font-bold flex items-center gap-0.5">
-                    ★{' '}
-                    {Number(pro.rating_avg || 0)
-                      .toFixed(1)
-                      .replace('.', ',')}
-                  </div>
-                )}
-                <div className="w-2 h-2 bg-primary transform rotate-45 -mt-1 shadow-lg" />
               </div>
-            ))}
-          </div>
+
+              {/* Top rated */}
+              <div className="flex items-center gap-3 rounded-xl border bg-muted/30 p-4">
+                <div className="bg-amber-100 p-2.5 rounded-lg">
+                  <Star className="h-5 w-5 text-amber-500" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground">Melhor avaliado</p>
+                  <p className="text-lg font-bold truncate">
+                    {stats.error || !stats.data?.topRated
+                      ? '--'
+                      : `${stats.data.topRated.name} (${stats.data.topRated.rating
+                          .toFixed(1)
+                          .replace('.', ',')})`}
+                  </p>
+                </div>
+              </div>
+
+              {/* Avg response time */}
+              <div className="flex items-center gap-3 rounded-xl border bg-muted/30 p-4">
+                <div className="bg-primary/10 p-2.5 rounded-lg">
+                  <Clock className="h-5 w-5 text-primary" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground">Tempo médio de resposta</p>
+                  <p className="text-lg font-bold">
+                    {stats.error ? '--' : `~${stats.data?.avgResponseMin ?? 5} min`}
+                  </p>
+                </div>
+              </div>
+
+              {/* Region coverage */}
+              <div className="flex items-center gap-3 rounded-xl border bg-muted/30 p-4">
+                <div className="bg-primary/10 p-2.5 rounded-lg">
+                  <MapPin className="h-5 w-5 text-primary" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs text-muted-foreground">Atendemos sua região</p>
+                  <p className="text-lg font-bold truncate">
+                    {stats.error
+                      ? '--'
+                      : stats.data?.hasAddress
+                        ? stats.data.addressLabel || 'Sim'
+                        : 'Cadastre seu endereço'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <Button asChild size="lg" className="w-full sm:w-auto">
+            <Link to="/client/request">
+              <PlusCircle className="mr-2 h-5 w-5" /> Solicitar Profissional
+            </Link>
+          </Button>
         </CardContent>
       </Card>
 
