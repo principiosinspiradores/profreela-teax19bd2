@@ -32,7 +32,7 @@ import { getServices, createJob, getMapsApiKey } from '@/services/api'
 import { getSettings, DEFAULT_SETTINGS, type PlatformSettings } from '@/services/settings'
 import { getHourMultiplier, shortJobBand, getTravelFee } from '@/lib/pricing'
 import { combineDateAndTime, formatTimeRange } from '@/lib/scheduling'
-import { getSavedLocations, type SavedLocation } from '@/services/locations'
+import { getSavedLocations, createSavedLocation, type SavedLocation } from '@/services/locations'
 import { useAuth } from '@/hooks/use-auth'
 import AddressAutocomplete, { type ParsedAddress } from '@/components/AddressAutocomplete'
 import { geocodeAddress } from '@/services/googleMaps'
@@ -162,6 +162,19 @@ export default function RequestService() {
       }
       const tasks = Array.from({ length: quantityClamped }, () => createJob(basePayload))
       await Promise.all(tasks)
+      // Auto-save the address used so it reappears on the dashboard card and
+      // can be reused on the next request. Best-effort — never blocks the flow.
+      try {
+        await createSavedLocation({
+          client_id: user.id,
+          label: enderecoCompleto,
+          address: enderecoCompleto,
+          latitude: lat,
+          longitude: lng,
+        })
+      } catch {
+        // ignore — location saving is non-critical
+      }
       // Build the post-submit summary including the scheduled time window when
       // available, so the client sees the real start/end of the service.
       const slotSummary =

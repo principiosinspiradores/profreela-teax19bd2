@@ -97,6 +97,25 @@ export function useDashboardStats(clientId: string | undefined): DashboardStatsS
           // ignore — treat as no address
         }
 
+        // Fallback: if the client has no saved locations, look up the
+        // address of their most recent job. This covers clients who
+        // already requested services before saving a location.
+        if (!hasAddress) {
+          try {
+            const recent = await pb.collection('jobs').getList(1, 1, {
+              filter: `customer_id="${clientId}"`,
+              sort: '-created',
+            })
+            const lastAddress = recent.items?.[0]?.address
+            if (lastAddress) {
+              hasAddress = true
+              addressLabel = lastAddress
+            }
+          } catch {
+            // ignore — treat as no address
+          }
+        }
+
         if (!active) return
         setState({
           data: {

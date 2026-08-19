@@ -290,11 +290,15 @@ export default function ClientDashboard() {
                 <div className="min-w-0">
                   <p className="text-xs text-muted-foreground">Atendemos sua região</p>
                   <p className="text-lg font-bold truncate">
-                    {stats.error
-                      ? '--'
-                      : stats.data?.hasAddress
-                        ? stats.data.addressLabel || 'Sim'
-                        : 'Cadastre seu endereço'}
+                    {stats.error ? (
+                      '--'
+                    ) : stats.data?.hasAddress ? (
+                      stats.data.addressLabel || 'Sim'
+                    ) : (
+                      <Link to="/client/request" className="text-primary hover:underline">
+                        Cadastre seu endereço
+                      </Link>
+                    )}
                   </p>
                 </div>
               </div>
