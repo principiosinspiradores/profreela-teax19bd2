@@ -1,20 +1,20 @@
-// Server-side payment intent / split helper with manual-capture (escrow) flow.
+// Server-side payment intent / split helper for the "pay at request" escrow
+// flow (Airbnb / GetNinjas style).
 //
-// The platform never charges the customer immediately. When a professional
-// accepts a request we *pre-authorize* the amount on the customer's card
-// (Stripe `capture_method=manual`). The authorization is held during the
-// service, then a 7-day guarantee window runs after completion, and only
-// then do we capture + apply the platform-fee split. Disputes pause the
-// window; if the pro never clocks in within 24h, the authorization is
-// cancelled (auto-refund).
+// The client pays BEFORE the job is created: the amount is captured up-front
+// and held in escrow by the platform. When a professional later accepts and
+// completes the job, a 24h guarantee window runs from `completed_at`, after
+// which the held payment is released to the professional (see the
+// release_held_payments cron). If the job is cancelled before release, the
+// held amount is refunded to the client (payment_status = 'refunded').
 //
 // Endpoints
 //   GET  /backend/v1/payments/config
-//   POST /backend/v1/payments/create-split       -> pre-authorize (manual capture)
-//   POST /backend/v1/payments/capture-split      -> capture + split (after guarantee)
-//   POST /backend/v1/payments/release-payment    -> start 7-day guarantee window
+//   POST /backend/v1/payments/create-split       -> capture + hold (escrow)
+//   POST /backend/v1/payments/capture-split      -> capture + split (admin/release)
+//   POST /backend/v1/payments/release-payment    -> start the guarantee window
 //   POST /backend/v1/payments/dispute-payment    -> pause the guarantee window
-//   POST /backend/v1/payments/cancel-auth        -> cancel the pre-authorization
+//   POST /backend/v1/payments/cancel-auth        -> refund the held payment
 //
 // All endpoints work in "demo" mode (no live gateway keys): they persist the
 // payment_* fields on the job record and return consistent mock payloads.
@@ -43,8 +43,11 @@ routerAdd('GET', '/backend/v1/payments/config', (e) => {
 // ---------------------------------------------------------------------------
 // POST /backend/v1/payments/create-split
 //   body: { amount, currency, proAccountId, description, jobId }
-//   -> pre-authorizes (manual capture). Stores payment_intent_id +
-//      payment_status=authorized + payment_authorized_at on the job.
+//   -> captures + holds the amount in escrow. Stores payment_intent_id +
+//      payment_status=held + payment_authorized_at on the job (when a jobId
+//      is provided). `proAccountId` is optional in the pay-at-request flow:
+//      the client pays before a professional has accepted, so the split
+//      destination may not be known yet.
 // ---------------------------------------------------------------------------
 routerAdd('POST', '/backend/v1/payments/create-split', (e) => {
   const auth = e.requestInfo().auth
@@ -62,9 +65,9 @@ routerAdd('POST', '/backend/v1/payments/create-split', (e) => {
   if (!amount || amount <= 0) {
     return e.json(400, { ok: false, error: 'Valor inválido.' })
   }
-  if (!proAccountId) {
-    return e.json(400, { ok: false, error: 'Conta do profissional é obrigatória.' })
-  }
+  // proAccountId is optional: in the pay-at-request flow the client pays
+  // before any pro has accepted, so the split destination is not known yet.
+  // The split is finalized when the payment is released (capture-split).
 
   // --- read settings (inlined) ---------------------------------------------
   let feePercent = 15
@@ -96,6 +99,23 @@ routerAdd('POST', '/backend/v1/payments/create-split', (e) => {
     if (!secretKey) {
       return e.json(503, { ok: false, error: 'Stripe não configurado.' })
     }
+    // Pay-at-request: capture immediately (capture_method=automatic) so the
+    // funds are held in escrow by the platform. The platform-fee split
+    // (application_fee_amount) + transfer destination are set now when a
+    // pro is known; otherwise the split is applied at release time.
+    let stripeBody =
+      'amount=' +
+      Math.round(amount * 100) +
+      '&currency=' +
+      currency +
+      '&description=' +
+      encodeURIComponent(description) +
+      '&capture_method=automatic' +
+      '&application_fee_amount=' +
+      feeAmountCents
+    if (proAccountId) {
+      stripeBody += '&transfer_data[destination]=' + encodeURIComponent(proAccountId)
+    }
     const res = $http.send({
       url: 'https://api.stripe.com/v1/payment_intents',
       method: 'POST',
@@ -103,18 +123,7 @@ routerAdd('POST', '/backend/v1/payments/create-split', (e) => {
         Authorization: 'Bearer ' + secretKey,
         'Content-Type': 'application/x-www-form-urlencoded',
       },
-      body:
-        'amount=' +
-        Math.round(amount * 100) +
-        '&currency=' +
-        currency +
-        '&description=' +
-        encodeURIComponent(description) +
-        '&capture_method=manual' +
-        '&application_fee_amount=' +
-        feeAmountCents +
-        '&transfer_data[destination]=' +
-        encodeURIComponent(proAccountId),
+      body: stripeBody,
       timeout: 20,
     })
     providerResponse = res.json || {}
@@ -128,11 +137,15 @@ routerAdd('POST', '/backend/v1/payments/create-split', (e) => {
     if (!accessToken) {
       return e.json(503, { ok: false, error: 'Mercado Pago não configurado.' })
     }
+    // Pay-at-request: capture=true so the payment is captured immediately and
+    // held in the platform's escrow balance. When a marketplace/seller account
+    // id is provided via proAccountId, the split is applied now; otherwise it
+    // is applied at release time.
     const payload = {
       transaction_amount: amount,
       description: description,
       application_fee: feeAmountCents / 100,
-      capture: false,
+      capture: true,
       payer: { entity_type: 'individual' },
     }
     const res = $http.send({
@@ -159,14 +172,16 @@ routerAdd('POST', '/backend/v1/payments/create-split', (e) => {
     intentId = 'pi_demo_' + $security.randomString(16)
   }
 
-  // Persist authorization state on the job (if a jobId was provided).
+  // Persist the held (escrow) state on the job (if a jobId was provided).
+  // payment_status = 'held' means "captured by the platform, held in escrow";
+  // the 24h release window starts when the job is completed (finish_job).
   if (jobId) {
     let job = null
     try {
       job = $app.findFirstRecordByData('jobs', 'id', jobId)
     } catch (_) {}
     if (job) {
-      job.set('payment_status', 'authorized')
+      job.set('payment_status', 'held')
       job.set('payment_intent_id', intentId)
       job.set('payment_authorized_at', nowIso)
       $app.save(job)
@@ -176,7 +191,7 @@ routerAdd('POST', '/backend/v1/payments/create-split', (e) => {
   return e.json(200, {
     ok: true,
     demo: provider === '',
-    payment_status: 'authorized',
+    payment_status: 'held',
     payment_intent_id: intentId,
     authorized_at: nowIso,
     split: {
@@ -186,7 +201,7 @@ routerAdd('POST', '/backend/v1/payments/create-split', (e) => {
       pro_amount: (Math.round(amount * 100) - feeAmountCents) / 100,
       fee_percent: feePercent,
       min_fee: minFee,
-      capture_method: 'manual',
+      capture_method: 'automatic',
     },
   })
 })
@@ -194,9 +209,11 @@ routerAdd('POST', '/backend/v1/payments/create-split', (e) => {
 // ---------------------------------------------------------------------------
 // POST /backend/v1/payments/capture-split
 //   body: { jobId }
-//   -> captures the pre-authorization and applies the platform-fee split.
-//      Only callable after the guarantee window has elapsed (or by admin
-//      override). Sets payment_status=captured + payment_released_at.
+//   -> captures (if still pre-authorized) and finalizes the platform-fee split
+//      for a held payment. Only callable after the guarantee window has
+//      elapsed (or by admin override). Sets payment_status=captured +
+//      payment_released_at. In the pay-at-request flow the payment is already
+//      captured at creation time, so this mainly finalizes the split to the pro.
 // ---------------------------------------------------------------------------
 routerAdd('POST', '/backend/v1/payments/capture-split', (e) => {
   const auth = e.requestInfo().auth

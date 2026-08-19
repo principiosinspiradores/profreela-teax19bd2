@@ -17,12 +17,14 @@ export interface PaymentSplit {
 
 /** Lifecycle status of an escrow payment stored on a job record. */
 export type PaymentStatus =
+  | 'pending'
   | 'authorized'
   | 'held'
   | 'released'
   | 'captured'
   | 'disputed'
   | 'cancelled'
+  | 'refunded'
   | ''
 
 /** Job record augmented with the escrow fields (subset). */
@@ -37,11 +39,13 @@ export interface PaymentState {
 }
 
 /**
- * Payment gateway integration (Stripe / Mercado Pago) with manual-capture
- * (escrow) flow. The customer's card is pre-authorized when a professional
- * accepts the request; the capture + platform-fee split happens only after
- * the 7-day guarantee window. Disputes pause the window; if the pro never
- * clocks in within 24h, the authorization is cancelled.
+ * Payment gateway integration (Stripe / Mercado Pago) with the "pay at request"
+ * (escrow) flow. The customer pays BEFORE the job is created, the amount is
+ * captured + held in escrow by the platform (payment_status = 'held'). When
+ * the professional completes the job, a 24h guarantee window starts; after it
+ * elapses without a dispute, the held payment is released to the pro. Disputes
+ * pause the window; if the job is cancelled before release, the held amount
+ * is refunded to the client (payment_status = 'refunded').
  */
 
 /** Get the configured gateway + its public key (or null if none configured). */
@@ -163,21 +167,25 @@ export async function getCheckoutPreview(amount: number, currency = 'brl') {
 /* ------------------------------------------------------------------ */
 
 const STATUS_LABELS: Record<string, string> = {
+  pending: 'Pendente',
   authorized: 'Pré-autorizado',
   held: 'Em garantia',
   released: 'Liberado',
   captured: 'Capturado',
   disputed: 'Em disputa',
   cancelled: 'Cancelado',
+  refunded: 'Reembolsado',
 }
 
 const STATUS_TONES: Record<string, string> = {
+  pending: 'bg-slate-100 text-slate-700 border-slate-200',
   authorized: 'bg-blue-100 text-blue-800 border-blue-200',
   held: 'bg-amber-100 text-amber-800 border-amber-200',
   released: 'bg-green-100 text-green-800 border-green-200',
   captured: 'bg-green-100 text-green-800 border-green-200',
   disputed: 'bg-red-100 text-red-800 border-red-200',
   cancelled: 'bg-slate-200 text-slate-700 border-slate-300',
+  refunded: 'bg-purple-100 text-purple-800 border-purple-200',
 }
 
 export function paymentStatusLabel(status: PaymentStatus): string {

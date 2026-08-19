@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-19T17:04:38.165Z",
+  "generatedAt": "2026-08-19T20:30:04.257Z",
   "collections": [
     {
       "name": "users",
@@ -255,13 +255,6 @@
           "autodateTriggers": ["onCreate", "onUpdate"]
         },
         {
-          "name": "payment_status",
-          "type": "select",
-          "required": false,
-          "system": false,
-          "selectValues": ["authorized", "held", "released", "captured", "disputed", "cancelled"]
-        },
-        {
           "name": "payment_intent_id",
           "type": "text",
           "required": false,
@@ -350,6 +343,22 @@
           "type": "date",
           "required": false,
           "system": false
+        },
+        {
+          "name": "payment_status",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": [
+            "pending",
+            "authorized",
+            "held",
+            "released",
+            "captured",
+            "disputed",
+            "cancelled",
+            "refunded"
+          ]
         }
       ],
       "indexes": []

@@ -16,28 +16,41 @@ import {
 import type { PlatformSettings } from '@/services/settings'
 
 export interface CheckoutProps {
-  /** Total amount to pre-authorize on the customer's card (in BRL). */
+  /** Total amount to capture + hold in escrow on the customer's card (in BRL). */
   amount: number
-  /** Connected account id of the professional who receives the split. */
-  proAccountId: string
+  /**
+   * Connected account id of the professional who receives the split. Optional
+   * in the pay-at-request flow: the client pays before any pro has accepted, so
+   * the split destination may not be known yet (finalized at release time).
+   */
+  proAccountId?: string
   /** Optional job/service description sent to the gateway. */
   description?: string
   /** Optional job id — persisted on the payment record for tracking. */
   jobId?: string
-  /** Called after a successful (or demo) pre-authorization. */
+  /** Called after a successful (or demo) capture+hold. */
   onPaid?: (result: any) => void
+  /** Optional label for the confirm button (defaults to "Pagar e solicitar"). */
+  confirmLabel?: string
 }
 
 /**
- * Reusable checkout interface with manual-capture (escrow) pre-authorization.
+ * Reusable checkout interface for the "pay at request" (escrow) flow.
  *
- * The full amount is pre-authorized on the customer's card when the
- * professional accepts the request — it is NOT captured immediately. The
- * capture + platform-fee split happens only after a 7-day guarantee window
- * following service completion. If the pro never clocks in within 24h, the
- * authorization is cancelled automatically (auto-refund).
+ * The full amount is captured + held in escrow by the platform when the client
+ * confirms the payment — it IS charged immediately, not merely pre-authorized.
+ * The platform-fee split is applied and the held amount is released to the
+ * professional 24h after the service is completed. If the job is cancelled
+ * before release, the held amount is refunded to the client.
  */
-export function Checkout({ amount, proAccountId, description, jobId, onPaid }: CheckoutProps) {
+export function Checkout({
+  amount,
+  proAccountId,
+  description,
+  jobId,
+  onPaid,
+  confirmLabel,
+}: CheckoutProps) {
   const { toast } = useToast()
   const [config, setConfig] = useState<PaymentConfig | null>(null)
   const [split, setSplit] = useState<PaymentSplit | null>(null)
@@ -66,22 +79,22 @@ export function Checkout({ amount, proAccountId, description, jobId, onPaid }: C
     try {
       const result = await createSplitPayment({
         amount,
-        proAccountId,
+        proAccountId: proAccountId || '',
         description,
         jobId,
       })
       if (result?.ok || result?.id || result?.split) {
         toast({
-          title: 'Pagamento pré-autorizado',
+          title: 'Pagamento confirmado',
           description: result?.demo
-            ? 'Pré-autorização simulada (modo demo). A cobrança ocorre após a garantia de 7 dias.'
-            : 'Valor pré-autorizado no cartão. A cobrança ocorre 7 dias após a conclusão do serviço.',
+            ? 'Pagamento simulado (modo demo). O valor fica em garantia e é liberado ao profissional 24h após a conclusão.'
+            : 'Valor pago e mantido em garantia pela plataforma. Será liberado ao profissional 24h após a conclusão do serviço.',
         })
         onPaid?.(result)
       } else {
         toast({
           title: 'Erro no pagamento',
-          description: result?.error || 'Não foi possível pré-autorizar o pagamento.',
+          description: result?.error || 'Não foi possível processar o pagamento.',
           variant: 'destructive',
         })
       }
@@ -111,7 +124,7 @@ export function Checkout({ amount, proAccountId, description, jobId, onPaid }: C
         ? 'Mercado Pago'
         : 'Modo demo'
 
-  const guaranteeDays = settings?.guarantee_period_days ?? 7
+  const guaranteeDays = settings?.guarantee_period_days ?? 1
 
   return (
     <Card className="w-full max-w-md mx-auto">
@@ -128,14 +141,13 @@ export function Checkout({ amount, proAccountId, description, jobId, onPaid }: C
       </CardHeader>
       <CardContent className="space-y-5">
         {/* Escrow notice */}
-        <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900 flex gap-2">
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900 flex gap-2">
           <Lock className="h-4 w-4 mt-0.5 shrink-0" />
           <div>
-            <strong>Pré-autorização (escrow).</strong> O valor é reservado no seu cartão,{' '}
-            <strong>não cobrado imediatamente</strong>. A cobrança só acontece {guaranteeDays} dias
-            após a conclusão do serviço. Se o profissional não iniciar o atendimento em{' '}
-            {settings?.clock_in_deadline_hours ?? 24}h, a pré-autorização é cancelada
-            automaticamente.
+            <strong>Pagamento em garantia (escrow).</strong> O valor é cobrado agora e mantido pela
+            plataforma. O profissional só recebe após a conclusão do serviço, com uma garantia de{' '}
+            {guaranteeDays === 1 ? '24h' : `${guaranteeDays} dias`} para contestação. Se o serviço
+            for cancelado antes da conclusão, o valor é reembolsado automaticamente.
           </div>
         </div>
 
@@ -143,7 +155,7 @@ export function Checkout({ amount, proAccountId, description, jobId, onPaid }: C
         {split && (
           <div className="rounded-lg border bg-muted/30 p-4 space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Total pré-autorizado</span>
+              <span className="text-muted-foreground">Total a pagar</span>
               <span className="font-bold">
                 R$ {split.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
               </span>
@@ -216,19 +228,19 @@ export function Checkout({ amount, proAccountId, description, jobId, onPaid }: C
         <Button className="w-full h-12 text-base" onClick={handlePay} disabled={paying}>
           {paying ? (
             <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Pré-autorizando...
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Processando...
             </>
           ) : (
             <>
-              <Lock className="h-4 w-4 mr-2" /> Pré-autorizar R${' '}
+              <Lock className="h-4 w-4 mr-2" /> {confirmLabel || 'Pagar e solicitar'} R${' '}
               {amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </>
           )}
         </Button>
 
         <p className="text-xs text-center text-muted-foreground flex items-center justify-center gap-1">
-          <Clock className="h-3 w-3" /> Cobrança efetivada apenas após {guaranteeDays} dias de
-          garantia. A plataforma retém a taxa de serviço na captura.
+          <Clock className="h-3 w-3" /> Valor liberado ao profissional{' '}
+          {guaranteeDays === 1 ? '24h' : `${guaranteeDays} dias`} após a conclusão do serviço.
         </p>
       </CardContent>
     </Card>

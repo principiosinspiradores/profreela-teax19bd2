@@ -131,10 +131,12 @@ routerAdd(
     job.set('completed_at', nowIso)
     $app.save(job)
 
-    // --- start the guarantee window (payment release) -----------------------
-    // Mirrors the release-payment endpoint: set payment_status=held and
-    // payment_hold_until = now + guarantee_period_days (default 7).
-    let guaranteeDays = 7
+    // --- start the 24h guarantee window (payment release) -------------------
+    // In the pay-at-request flow the payment is already `held` from job
+    // creation (captured by the platform, in escrow). Completion starts the
+    // release window: payment_hold_until = completed_at + guarantee_period_days
+    // (now 1 day = 24h). The release_held_payments cron flips it to `released`.
+    let guaranteeDays = 1
     try {
       const rows = $app.findRecordsByFilter('settings', '1=1', '', 1, 0)
       if (rows.length > 0) {
@@ -145,8 +147,10 @@ routerAdd(
 
     const holdUntil = new Date(Date.now() + guaranteeDays * 24 * 3600 * 1000).toISOString()
     const prevPaymentStatus = job.getString('payment_status')
-    // Only move into `held` if it makes sense for the current payment state
-    // (authorized / held / empty). Avoid clobbering captured/disputed/cancelled.
+    // Move into `held` + set the release window. In the pay-at-request flow the
+    // payment is already `held`, so this mainly stamps payment_hold_until. For
+    // legacy `authorized` / empty states, also move to `held`. Never clobber a
+    // terminal state (captured/disputed/cancelled/refunded).
     if (
       prevPaymentStatus === 'authorized' ||
       prevPaymentStatus === 'held' ||

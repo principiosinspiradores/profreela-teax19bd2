@@ -36,6 +36,14 @@ import { getSavedLocations, createSavedLocation, type SavedLocation } from '@/se
 import { useAuth } from '@/hooks/use-auth'
 import AddressAutocomplete, { type ParsedAddress } from '@/components/AddressAutocomplete'
 import { geocodeAddress } from '@/services/googleMaps'
+import { Checkout } from '@/components/Checkout'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog'
 
 export default function RequestService() {
   const [date, setDate] = useState<Date>()
@@ -56,6 +64,11 @@ export default function RequestService() {
   // Forces AddressAutocomplete to remount when a saved location is picked, so
   // the new `defaultValue` (derived from `value`) is applied to a fresh input.
   const [selectedSavedLocationId, setSelectedSavedLocationId] = useState<string | null>(null)
+  // Payment-at-request (escrow): the client pays BEFORE the job is created.
+  // `checkoutOpen` toggles the payment modal; `pendingPayload` holds the
+  // validated job data so it can be created only after a confirmed payment.
+  const [checkoutOpen, setCheckoutOpen] = useState(false)
+  const [pendingPayload, setPendingPayload] = useState<any | null>(null)
   const navigate = useNavigate()
   const { toast } = useToast()
   const { user } = useAuth()
@@ -109,6 +122,9 @@ export default function RequestService() {
   const scheduledAt = !isEmergency && date ? combineDateAndTime(date, time) : undefined
   const hasScheduledSlot = !!scheduledAt
 
+  // Validate the form and geocode the address WITHOUT creating the job yet.
+  // The job is only created after the payment is confirmed in the checkout
+  // modal (pay-at-request escrow flow).
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!selectedService || !user) return
@@ -145,10 +161,9 @@ export default function RequestService() {
         lng = geo.lng
       }
 
-      // Each requested professional becomes its own independent job. The client
-      // clicks once; we create N separate `jobs` records (one per pro) so each
-      // can be accepted, tracked and paid independently.
-      const basePayload = {
+      // Stash the validated payload; the job is created only after the payment
+      // is confirmed in the checkout modal (onPaid → createJobsAfterPayment).
+      setPendingPayload({
         customer_id: user.id,
         service_id: selectedService,
         status: 'pending',
@@ -159,39 +174,65 @@ export default function RequestService() {
         latitude: lat,
         longitude: lng,
         scheduled_at: isEmergency ? new Date().toISOString() : scheduledAt,
-      }
-      const tasks = Array.from({ length: quantityClamped }, () => createJob(basePayload))
+      })
+      setCheckoutOpen(true)
+    } catch (err) {
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível iniciar o pagamento.',
+        variant: 'destructive',
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  // Called by the Checkout modal once the payment has been confirmed (or
+  // simulated in demo mode). Creates the N jobs (one per requested pro), each
+  // born with payment_status='held' thanks to the payment_intent_id that the
+  // create-split endpoint stamped. ProAccountId is empty: in the pay-at-request
+  // flow the client pays before any pro has accepted, so the split destination
+  // is finalized when the payment is released.
+  const createJobsAfterPayment = async (paymentResult: any) => {
+    if (!pendingPayload || !user) return
+    const intentId = paymentResult?.payment_intent_id || paymentResult?.id || ''
+    const payload = { ...pendingPayload, payment_status: 'held', payment_intent_id: intentId }
+    try {
+      const tasks = Array.from({ length: quantityClamped }, () => createJob(payload))
       await Promise.all(tasks)
       // Auto-save the address used so it reappears on the dashboard card and
       // can be reused on the next request. Best-effort — never blocks the flow.
       try {
         await createSavedLocation({
           client_id: user.id,
-          label: enderecoCompleto,
-          address: enderecoCompleto,
-          latitude: lat,
-          longitude: lng,
+          label: pendingPayload.address,
+          address: pendingPayload.address,
+          latitude: pendingPayload.latitude,
+          longitude: pendingPayload.longitude,
         })
       } catch {
         // ignore — location saving is non-critical
       }
-      // Build the post-submit summary including the scheduled time window when
-      // available, so the client sees the real start/end of the service.
       const slotSummary =
         !isEmergency && scheduledAt ? ` ${formatTimeRange(scheduledAt, safeHours)}.` : ''
       toast({
         title: 'Solicitação Criada!',
         description:
           (quantityClamped > 1
-            ? `${quantityClamped} solicitações criadas. Buscando profissionais na sua região...`
-            : 'Buscando o melhor profissional na sua região...') + slotSummary,
+            ? `${quantityClamped} solicitações criadas com pagamento garantido. Buscando profissionais...`
+            : 'Pagamento confirmado! Buscando o melhor profissional na sua região...') +
+          slotSummary,
         className: 'bg-primary text-white border-none',
       })
+      setCheckoutOpen(false)
+      setPendingPayload(null)
       navigate('/client')
     } catch (err) {
-      toast({ title: 'Erro', description: 'Não foi possível criar.', variant: 'destructive' })
-    } finally {
-      setLoading(false)
+      toast({
+        title: 'Pagamento confirmado, mas houve um erro ao criar a solicitação',
+        description: 'Entre em contato com o suporte. O valor pago será reembolsado.',
+        variant: 'destructive',
+      })
     }
   }
 
@@ -502,6 +543,30 @@ export default function RequestService() {
           </div>
         </div>
       </form>
+
+      {/* Payment-at-request (escrow) modal. Opens AFTER the form is validated
+          but BEFORE the job is created. The job is only created (with
+          payment_status='held') once the payment is confirmed. */}
+      <Dialog open={checkoutOpen} onOpenChange={setCheckoutOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Confirmar e pagar</DialogTitle>
+            <DialogDescription>
+              {quantityClamped > 1
+                ? `Você está prestes a pagar ${quantityClamped} solicitações de R$ ${unitPrice.toFixed(2)} cada. `
+                : 'Você está prestes a pagar pela sua solicitação. '}
+              O valor fica em garantia com a plataforma e só é liberado ao profissional 24h após a
+              conclusão do serviço.
+            </DialogDescription>
+          </DialogHeader>
+          <Checkout
+            amount={unitPrice}
+            description={`Serviço ProFreela — ${activeService?.name ?? ''}`}
+            onPaid={createJobsAfterPayment}
+            confirmLabel="Pagar e solicitar"
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

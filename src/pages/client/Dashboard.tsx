@@ -1,17 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import {
-  PlusCircle,
-  Clock,
-  Shield,
-  MapPin,
-  CreditCard,
-  QrCode,
-  AlertTriangle,
-  Ban,
-  Star,
-  Users,
-} from 'lucide-react'
+import { PlusCircle, Clock, Shield, MapPin, AlertTriangle, Ban, Star, Users } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -24,18 +13,17 @@ import {
   DialogFooter,
   DialogDescription,
 } from '@/components/ui/dialog'
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Label } from '@/components/ui/label'
 import { Loader2 } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
-import { getClientJobs, getBanners, getNearbyPros, updateJob } from '@/services/api'
+import { getClientJobs, getBanners, getNearbyPros } from '@/services/api'
 import { useRealtime } from '@/hooks/use-realtime'
 import { useToast } from '@/hooks/use-toast'
 import { getAvatarUrl } from '@/lib/avatar'
 import { BrandLogo } from '@/components/BrandLogo'
 import { PaymentStatusBadge } from '@/components/PaymentStatusBadge'
 import { DisputeDialog } from '@/components/DisputeDialog'
-import { createSplitPayment, type PaymentState } from '@/services/checkout'
+import { type PaymentState } from '@/services/checkout'
 import { useDashboardStats } from '@/hooks/use-dashboard-stats'
 import {
   getCancellationPolicy,
@@ -60,9 +48,6 @@ export default function ClientDashboard() {
   const [banners, setBanners] = useState<any[]>([])
   const [pros, setPros] = useState<any[]>([])
 
-  const [paymentJob, setPaymentJob] = useState<any>(null)
-  const [paymentMethod, setPaymentMethod] = useState('credit_card')
-  const [processingPayment, setProcessingPayment] = useState(false)
   const [disputeJob, setDisputeJob] = useState<any>(null)
 
   const [cancelJobState, setCancelJobState] = useState<any>(null)
@@ -99,33 +84,6 @@ export default function ClientDashboard() {
 
   const activeJobs = jobs.filter((j) => ['pending', 'accepted', 'in_progress'].includes(j.status))
   const completedJobs = jobs.filter((j) => j.status === 'completed')
-
-  const handlePayment = async () => {
-    if (!paymentJob) return
-    setProcessingPayment(true)
-    try {
-      // Pre-authorize (manual capture) the amount on the customer's card.
-      await createSplitPayment({
-        amount: paymentJob.price,
-        proAccountId: paymentJob.pro_id || paymentJob.expand?.pro_id?.id || '',
-        description: paymentJob.expand?.service_id?.name || 'Serviço ProFreela',
-        jobId: paymentJob.id,
-      })
-      // The amount is held, not captured. Service moves to in_progress.
-      await updateJob(paymentJob.id, { status: 'in_progress' })
-      toast({
-        title: 'Pagamento pré-autorizado',
-        description:
-          'Valor reservado no cartão. A cobrança ocorre 7 dias após a conclusão do serviço.',
-      })
-      setPaymentJob(null)
-      loadData()
-    } catch (err) {
-      toast({ title: 'Erro no pagamento', variant: 'destructive' })
-    } finally {
-      setProcessingPayment(false)
-    }
-  }
 
   const handleConfirmCancel = async () => {
     if (!cancelJobState) return
@@ -349,15 +307,6 @@ export default function ClientDashboard() {
                           {job.expand?.pro_id?.name || 'Profissional'}
                         </span>
                         <div className="ml-auto flex items-center gap-2">
-                          {job.status === 'accepted' && (
-                            <Button
-                              size="sm"
-                              className="bg-green-600 hover:bg-green-700 text-white"
-                              onClick={() => setPaymentJob(job)}
-                            >
-                              Pré-autorizar
-                            </Button>
-                          )}
                           {(job.status === 'accepted' || job.status === 'in_progress') && (
                             <Button asChild variant="link" size="sm" className="h-auto py-0">
                               <Link to={`/chat/${job.id}`}>
@@ -385,15 +334,6 @@ export default function ClientDashboard() {
                       </div>
                     ) : (
                       <div className="flex items-center justify-end gap-2 mt-4 pt-4 border-t">
-                        {job.status === 'accepted' && (
-                          <Button
-                            size="sm"
-                            className="bg-green-600 hover:bg-green-700 text-white"
-                            onClick={() => setPaymentJob(job)}
-                          >
-                            Pré-autorizar
-                          </Button>
-                        )}
                         {(job.status === 'accepted' || job.status === 'in_progress') && (
                           <Button asChild variant="link" size="sm" className="h-auto py-0">
                             <Link to={`/chat/${job.id}`}>
@@ -438,61 +378,6 @@ export default function ClientDashboard() {
           </div>
         )}
       </div>
-
-      {/* Payment Modal */}
-      <Dialog open={!!paymentJob} onOpenChange={(o) => !o && setPaymentJob(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Pagamento Seguro</DialogTitle>
-            <DialogDescription>
-              O valor é <strong>pré-autorizado</strong> (escrow): reservado no cartão, sem cobrança
-              imediata. A captura acontece 7 dias após a conclusão do serviço.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4 space-y-4">
-            <div className="flex justify-between items-center bg-muted/50 p-4 rounded-xl">
-              <span className="font-medium text-muted-foreground">Valor Pré-autorizado</span>
-              <span className="text-2xl font-bold text-primary">
-                R$ {paymentJob?.price?.toFixed(2)}
-              </span>
-            </div>
-
-            <div className="space-y-3">
-              <Label>Método de Pagamento</Label>
-              <RadioGroup
-                value={paymentMethod}
-                onValueChange={setPaymentMethod}
-                className="grid grid-cols-2 gap-4"
-              >
-                <Label
-                  htmlFor="cc"
-                  className="flex flex-col items-center justify-center border-2 rounded-xl p-4 cursor-pointer hover:bg-muted/50 [&:has([data-state=checked])]:border-primary transition-all"
-                >
-                  <RadioGroupItem value="credit_card" id="cc" className="sr-only" />
-                  <CreditCard className="h-6 w-6 mb-2 text-primary" />
-                  <span className="text-sm font-medium">Cartão de Crédito</span>
-                </Label>
-                <Label
-                  htmlFor="pix"
-                  className="flex flex-col items-center justify-center border-2 rounded-xl p-4 cursor-pointer hover:bg-muted/50 [&:has([data-state=checked])]:border-primary transition-all"
-                >
-                  <RadioGroupItem value="pix" id="pix" className="sr-only" />
-                  <QrCode className="h-6 w-6 mb-2 text-primary" />
-                  <span className="text-sm font-medium">Pix</span>
-                </Label>
-              </RadioGroup>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPaymentJob(null)}>
-              Cancelar
-            </Button>
-            <Button onClick={handlePayment} disabled={processingPayment}>
-              {processingPayment ? 'Pré-autorizando...' : 'Pré-autorizar Pagamento'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <DisputeDialog
         jobId={disputeJob?.id ?? null}
@@ -582,7 +467,7 @@ export default function ClientDashboard() {
                   </p>
                   {!preview.free && (
                     <p className="text-sm mt-1">
-                      O valor será deduzido da pré-autorização no cartão ou cobrado via Pix.
+                      O valor pago em garantia será reembolsado ou retido conforme a política.
                     </p>
                   )}
                 </div>

@@ -283,9 +283,12 @@ routerAdd(
       job.set('cancelled_at', nowIso)
       if (reason) job.set('cancellation_reason', reason)
       job.set('penalty_amount', penaltyAmount)
-      // Release any pre-authorization the previous pro held.
+      // Release any pre-authorization the previous pro held, or refund a
+      // held (pay-at-request) payment back to the client.
       if (paymentStatus === 'authorized' && penaltyStatus !== 'charged') {
         job.set('payment_status', 'cancelled')
+      } else if (paymentStatus === 'held') {
+        job.set('payment_status', 'refunded')
       }
       reopened = true
     } else {

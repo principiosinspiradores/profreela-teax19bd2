@@ -1,6 +1,14 @@
 import { useEffect, useState } from 'react'
 import { Badge } from '@/components/ui/badge'
-import { Clock, ShieldCheck, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react'
+import {
+  Clock,
+  ShieldCheck,
+  AlertTriangle,
+  CheckCircle2,
+  XCircle,
+  BadgeCheck,
+  RotateCcw,
+} from 'lucide-react'
 import {
   guaranteeRemainingMs,
   formatGuaranteeCountdown,
@@ -12,9 +20,9 @@ import {
 /**
  * Reusable badge + guarantee countdown for the escrow payment lifecycle.
  *
- * Shows the current payment status (Pré-autorizado, Em garantia, Liberado,
- * Em disputa, Cancelado) and, when in the guarantee window, a live
- * regressive timer of the days/hours remaining until capture.
+ * Shows the current payment status (Pagamento garantido, Pré-autorizado,
+ * Liberado, Em disputa, Cancelado, Reembolsado) and, when in the guarantee
+ * window, a live regressive timer of the days/hours remaining until capture.
  */
 export function PaymentStatusBadge({ state }: { state: PaymentState | null | undefined }) {
   // Re-render every minute so the countdown stays live.
@@ -39,12 +47,14 @@ export function PaymentStatusBadge({ state }: { state: PaymentState | null | und
     status === 'authorized'
       ? ShieldCheck
       : status === 'held'
-        ? Clock
+        ? BadgeCheck
         : status === 'released' || status === 'captured'
           ? CheckCircle2
           : status === 'disputed'
             ? AlertTriangle
-            : XCircle
+            : status === 'refunded'
+              ? RotateCcw
+              : XCircle
 
   const Icon = icon
 
