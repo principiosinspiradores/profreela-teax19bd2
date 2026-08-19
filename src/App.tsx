@@ -24,6 +24,7 @@ import AdminSettings from './pages/admin/Settings'
 import AdminUsers from './pages/admin/Users'
 import AdminPricing from './pages/admin/Pricing'
 import AdminReviews from './pages/admin/Reviews'
+import Chat from './pages/Chat'
 
 // Route guard: only allows authenticated users with one of `allowedRoles`.
 // Visitors (guests) are sent to the landing page; authenticated users with a
@@ -117,6 +118,16 @@ const AppRoutes = () => (
         element={
           <ProtectedRoute allowedRoles={['client']}>
             <ClientLocations />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Chat Route */}
+      <Route
+        path="/chat/:jobId"
+        element={
+          <ProtectedRoute allowedRoles={['client', 'pro']}>
+            <Chat />
           </ProtectedRoute>
         }
       />

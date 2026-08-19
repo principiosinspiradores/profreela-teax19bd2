@@ -11,7 +11,9 @@ import {
   User,
   MapPinned,
   ShieldAlert,
+  MessageCircle,
 } from 'lucide-react'
+import { useUnreadMessages } from '@/hooks/use-unread-messages'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
@@ -67,6 +69,7 @@ export default function ActiveJob() {
   const navigate = useNavigate()
   const { toast } = useToast()
   const { id: jobId } = useParams<{ id: string }>()
+  const unreadMessages = useUnreadMessages()
 
   const [job, setJob] = useState<any>(null)
   const [loadingJob, setLoadingJob] = useState(true)
@@ -499,7 +502,24 @@ export default function ActiveJob() {
 
         <CardContent className="p-6 space-y-4">
           <div>
-            <h2 className="text-xl font-bold mb-1">{serviceName}</h2>
+            <div className="flex items-center justify-between gap-2">
+              <h2 className="text-xl font-bold mb-1">{serviceName}</h2>
+              {job?.status && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="relative shrink-0"
+                  onClick={() => navigate(`/chat/${jobId}`)}
+                >
+                  <MessageCircle className="h-4 w-4 mr-1" /> Chat
+                  {unreadMessages.counts[jobId as string] > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 h-4 min-w-4 px-1 flex items-center justify-center rounded-full bg-primary text-primary-foreground text-[10px] font-semibold border-2 border-background">
+                      {unreadMessages.counts[jobId as string]}
+                    </span>
+                  )}
+                </Button>
+              )}
+            </div>
             <div className="space-y-1 text-sm text-muted-foreground">
               <p className="flex items-center gap-2">
                 <User className="h-4 w-4" /> {clientName}
@@ -734,10 +754,22 @@ export default function ActiveJob() {
             )}
 
             {step === 'finished' && (
-              <div className="text-center py-8">
+              <div className="text-center py-8 space-y-3">
                 <CheckCircle className="h-12 w-12 text-secondary mx-auto mb-3" />
                 <h3 className="text-xl font-bold mb-1">Serviço concluído</h3>
-                <Button variant="outline" className="mt-4" onClick={() => navigate('/pro')}>
+                <Button
+                  variant="outline"
+                  className="relative"
+                  onClick={() => navigate(`/chat/${jobId}`)}
+                >
+                  <MessageCircle className="h-4 w-4 mr-2" /> Ver conversa
+                  {unreadMessages.counts[jobId as string] > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 h-4 min-w-4 px-1 flex items-center justify-center rounded-full bg-primary text-primary-foreground text-[10px] font-semibold border-2 border-background">
+                      {unreadMessages.counts[jobId as string]}
+                    </span>
+                  )}
+                </Button>
+                <Button variant="outline" onClick={() => navigate('/pro')}>
                   Voltar ao painel
                 </Button>
               </div>

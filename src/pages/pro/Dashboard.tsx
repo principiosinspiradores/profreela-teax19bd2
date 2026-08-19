@@ -59,6 +59,8 @@ import {
   DEFAULT_CANCELLATION_POLICY,
   type CancellationPolicy,
 } from '@/services/cancellation'
+import { useUnreadMessages } from '@/hooks/use-unread-messages'
+import { MessageCircle } from 'lucide-react'
 
 export default function ProDashboard() {
   const [isOnline, setIsOnline] = useState(false)
@@ -79,6 +81,7 @@ export default function ProDashboard() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const { toast } = useToast()
+  const unreadMessages = useUnreadMessages()
 
   // Live `blocked_until` of the current pro (kept in a ref so the countdown
   // re-derives on every tick without a re-fetch).
@@ -449,9 +452,22 @@ export default function ProDashboard() {
                     </p>
                     <p className="text-xs text-muted-foreground truncate">{job.address}</p>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap">
                     <Button size="sm" onClick={() => navigate(`/pro/job/${job.id}`)}>
                       <Navigation2 className="h-4 w-4 mr-1" /> Continuar
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => navigate(`/chat/${job.id}`)}
+                      className="relative"
+                    >
+                      <MessageCircle className="h-4 w-4 mr-1" /> Mensagens
+                      {unreadMessages.counts[job.id] > 0 && (
+                        <span className="absolute -top-1.5 -right-1.5 h-4 min-w-4 px-1 flex items-center justify-center rounded-full bg-primary text-primary-foreground text-[10px] font-semibold border-2 border-background">
+                          {unreadMessages.counts[job.id]}
+                        </span>
+                      )}
                     </Button>
                     <Button
                       size="sm"
@@ -491,9 +507,24 @@ export default function ProDashboard() {
                     </p>
                     <p className="text-xs text-muted-foreground truncate">{job.address}</p>
                   </div>
-                  <Button size="sm" onClick={() => navigate(`/pro/job/${job.id}`)}>
-                    <Navigation2 className="h-4 w-4 mr-1" /> Continuar serviço
-                  </Button>
+                  <div className="flex gap-2 flex-wrap">
+                    <Button size="sm" onClick={() => navigate(`/pro/job/${job.id}`)}>
+                      <Navigation2 className="h-4 w-4 mr-1" /> Continuar serviço
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => navigate(`/chat/${job.id}`)}
+                      className="relative"
+                    >
+                      <MessageCircle className="h-4 w-4 mr-1" /> Mensagens
+                      {unreadMessages.counts[job.id] > 0 && (
+                        <span className="absolute -top-1.5 -right-1.5 h-4 min-w-4 px-1 flex items-center justify-center rounded-full bg-primary text-primary-foreground text-[10px] font-semibold border-2 border-background">
+                          {unreadMessages.counts[job.id]}
+                        </span>
+                      )}
+                    </Button>
+                  </div>
                 </div>
               ))}
             </CardContent>

@@ -47,11 +47,15 @@ import {
 import { getReviewsByAuthor } from '@/services/reviews'
 import { ReviewDialog } from '@/components/ReviewDialog'
 import { formatScheduledSlot } from '@/lib/scheduling'
+import { useUnreadMessages } from '@/hooks/use-unread-messages'
+import { MessageCircle } from 'lucide-react'
+// `Link` is already imported from react-router-dom at the top of this file.
 
 export default function ClientDashboard() {
   const { user } = useAuth()
   const { toast } = useToast()
   const stats = useDashboardStats(user?.id)
+  const unreadMessages = useUnreadMessages()
   const [jobs, setJobs] = useState<any[]>([])
   const [banners, setBanners] = useState<any[]>([])
   const [pros, setPros] = useState<any[]>([])
@@ -354,9 +358,14 @@ export default function ClientDashboard() {
                               Pré-autorizar
                             </Button>
                           )}
-                          {job.status === 'accepted' && (
-                            <Button variant="link" size="sm" className="h-auto py-0">
-                              Enviar Mensagem
+                          {(job.status === 'accepted' || job.status === 'in_progress') && (
+                            <Button asChild variant="link" size="sm" className="h-auto py-0">
+                              <Link to={`/chat/${job.id}`}>
+                                <MessageCircle className="h-4 w-4 mr-1" />
+                                {unreadMessages.counts[job.id] > 0
+                                  ? `Mensagens (${unreadMessages.counts[job.id]})`
+                                  : 'Enviar Mensagem'}
+                              </Link>
                             </Button>
                           )}
                           {(job.status === 'pending' || job.status === 'accepted') && (
@@ -385,6 +394,16 @@ export default function ClientDashboard() {
                             Pré-autorizar
                           </Button>
                         )}
+                        {(job.status === 'accepted' || job.status === 'in_progress') && (
+                          <Button asChild variant="link" size="sm" className="h-auto py-0">
+                            <Link to={`/chat/${job.id}`}>
+                              <MessageCircle className="h-4 w-4 mr-1" />
+                              {unreadMessages.counts[job.id] > 0
+                                ? `Mensagens (${unreadMessages.counts[job.id]})`
+                                : 'Enviar Mensagem'}
+                            </Link>
+                          </Button>
+                        )}
                         {(job.status === 'pending' || job.status === 'accepted') && (
                           <Button
                             size="sm"
@@ -399,7 +418,7 @@ export default function ClientDashboard() {
                           </Button>
                         )}
                       </div>
-                    )}
+                    )}{' '}
                     {job.payment_status === 'held' && (
                       <div className="flex items-center gap-2 mt-3">
                         <Button
