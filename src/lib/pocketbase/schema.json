@@ -1,12 +1,12 @@
 {
-  "generatedAt": "2026-08-19T11:56:59.204Z",
+  "generatedAt": "2026-08-19T12:40:18.212Z",
   "collections": [
     {
       "name": "users",
       "type": "auth",
       "apiRules": {
-        "list": "id = @request.auth.id || @request.auth.role = 'admin'",
-        "view": "id = @request.auth.id || @request.auth.role = 'admin'",
+        "list": "id = @request.auth.id || @request.auth.role = 'admin' || role = 'pro'",
+        "view": "id = @request.auth.id || @request.auth.role = 'admin' || role = 'pro'",
         "create": "",
         "update": "id = @request.auth.id || @request.auth.role = 'admin'",
         "delete": "id = @request.auth.id"
