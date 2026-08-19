@@ -32,9 +32,10 @@ import { getClientJobs, getBanners, getNearbyPros, updateJob } from '@/services/
 import { useRealtime } from '@/hooks/use-realtime'
 import { useToast } from '@/hooks/use-toast'
 import { getAvatarUrl } from '@/lib/avatar'
+import { BrandLogo } from '@/components/BrandLogo'
 import { PaymentStatusBadge } from '@/components/PaymentStatusBadge'
 import { DisputeDialog } from '@/components/DisputeDialog'
-import { createSplitPayment, releasePayment, type PaymentState } from '@/services/checkout'
+import { createSplitPayment, type PaymentState } from '@/services/checkout'
 import { useDashboardStats } from '@/hooks/use-dashboard-stats'
 import {
   getCancellationPolicy,
@@ -46,18 +47,6 @@ import {
 import { getReviewsByAuthor } from '@/services/reviews'
 import { ReviewDialog } from '@/components/ReviewDialog'
 import { formatScheduledSlot } from '@/lib/scheduling'
-
-/** A small emoji set for known service types, used as a fallback thumbnail. */
-const SERVICE_EMOJI: Record<string, string> = {
-  faxineira: '🧹',
-  camareira: '🛏️',
-  'auxiliar de serviços gerais': '🧽',
-  'ajudante operacional': '📦',
-}
-function serviceEmoji(name?: string): string | null {
-  if (!name) return null
-  return SERVICE_EMOJI[name.toLowerCase().trim()] || null
-}
 
 export default function ClientDashboard() {
   const { user } = useAuth()
@@ -131,20 +120,6 @@ export default function ClientDashboard() {
       toast({ title: 'Erro no pagamento', variant: 'destructive' })
     } finally {
       setProcessingPayment(false)
-    }
-  }
-
-  const handleComplete = async (job: any) => {
-    try {
-      await updateJob(job.id, { status: 'completed', completed_at: new Date().toISOString() })
-      await releasePayment(job.id)
-      toast({
-        title: 'Serviço concluído',
-        description: 'Iniciado o período de garantia de 7 dias. O pagamento será liberado após.',
-      })
-      loadData()
-    } catch {
-      toast({ title: 'Erro', description: 'Não foi possível concluir.', variant: 'destructive' })
     }
   }
 
@@ -331,9 +306,7 @@ export default function ClientDashboard() {
                         alt={job.expand.pro_id.name || 'Profissional'}
                       />
                     ) : (
-                      <span className="text-5xl" aria-hidden>
-                        {serviceEmoji(job.expand?.service_id?.name) || '🧰'}
-                      </span>
+                      <BrandLogo size="xl" />
                     )}
                     <Badge className="absolute top-2 right-2 bg-secondary capitalize">
                       {job.status}
@@ -379,11 +352,6 @@ export default function ClientDashboard() {
                               onClick={() => setPaymentJob(job)}
                             >
                               Pré-autorizar
-                            </Button>
-                          )}
-                          {job.status === 'in_progress' && (
-                            <Button size="sm" variant="default" onClick={() => handleComplete(job)}>
-                              Concluir Serviço
                             </Button>
                           )}
                           {job.status === 'accepted' && (

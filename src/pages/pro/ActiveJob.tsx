@@ -49,6 +49,7 @@ type Step = 'transit' | 'arrived' | 'start_photo' | 'working' | 'end_photo' | 'f
 
 const LEAVE_NOW_THRESHOLD_MIN = 0 // travel time >= remaining time -> "leave now"
 const WARNING_THRESHOLD_MIN = 5 // remaining - travel < 5min -> "leave in X min"
+const SCHEDULED_TOLERANCE_MS = 15 * 60 * 1000 // ±15 min window around the scheduled start
 
 function pad2(n: number): string {
   return n < 10 ? '0' + n : String(n)
@@ -238,9 +239,26 @@ export default function ActiveJob() {
 
   // --- actions --------------------------------------------------------------
   const handleArrived = () => {
-    // GPS check-in: within the 50m geofence of the destination, or geolocation
-    // unavailable (let the pro proceed — the backend gate + photo still apply).
-    if (coords && jobCoords && !withinGeofence) {
+    // GPS check-in is mandatory: we need a live fix AND the pro must be inside
+    // the 50m geofence of the destination. There is no bypass when GPS fails
+    // or is unavailable — the pro must enable location to confirm presence.
+    if (!coords) {
+      toast({
+        title: 'Localização necessária',
+        description: 'Ative sua localização para confirmar que você está no local.',
+        variant: 'destructive',
+      })
+      return
+    }
+    if (!jobCoords) {
+      toast({
+        title: 'Local do serviço indisponível',
+        description: 'Não foi possível obter as coordenadas do serviço para validar seu check-in.',
+        variant: 'destructive',
+      })
+      return
+    }
+    if (!withinGeofence) {
       toast({
         title: 'Ainda não',
         description: `Você precisa estar a menos de ${GEOFENCE_RADIUS_M}m do local para fazer check-in. (Distância atual: ~${metersAway}m)`,
@@ -301,6 +319,20 @@ export default function ActiveJob() {
 
   const handleStart = async () => {
     if (!jobId || starting) return
+    // Scheduled-time gate: only allow starting within ±15 min of the agreed
+    // time, so the pro can't start hours before or after the slot.
+    if (job?.scheduled_at) {
+      const schedMs = new Date(job.scheduled_at).getTime()
+      const driftMs = Math.abs(Date.now() - schedMs)
+      if (!isNaN(schedMs) && driftMs > SCHEDULED_TOLERANCE_MS) {
+        toast({
+          title: 'Fora do horário agendado',
+          description: `O serviço foi agendado para ${formatScheduledSlot(job.scheduled_at, job.hours)}. Você só pode iniciá-lo com até 15 minutos de tolerância.`,
+          variant: 'destructive',
+        })
+        return
+      }
+    }
     // Client-side geofence gate (mirrors the backend check).
     if (coords && jobCoords && !withinGeofence) {
       toast({
@@ -551,30 +583,9 @@ export default function ActiveJob() {
 
           <div className="space-y-4">
             {step === 'transit' && (
-              <>
-                <Button
-                  className="w-full h-14 text-lg"
-                  onClick={handleArrived}
-                  disabled={geoLoading}
-                >
-                  Cheguei no local
-                </Button>
-                {job.status === 'accepted' && (
-                  <Button
-                    className="w-full h-12 bg-secondary hover:bg-secondary/90 text-white"
-                    onClick={handleStart}
-                    disabled={starting}
-                  >
-                    {starting ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Iniciando…
-                      </>
-                    ) : (
-                      'Iniciar Serviço'
-                    )}
-                  </Button>
-                )}
-              </>
+              <Button className="w-full h-14 text-lg" onClick={handleArrived} disabled={geoLoading}>
+                Cheguei no local
+              </Button>
             )}
 
             {step === 'arrived' && (
