@@ -166,26 +166,39 @@ export default function ActiveJob() {
       .catch(() => setEndPhotoReady(false))
   }, [jobId, step])
 
-  // --- refresh distance + embed as GPS moves -------------------------------
-  const refreshRoute = useCallback(async (lat: number, lng: number, dest: GeocodeResult) => {
-    const originStr = `${lat},${lng}`
-    const destStr = `${dest.lat},${dest.lng}`
-    const [dist, embed] = await Promise.all([
-      getDistance(originStr, destStr),
-      getMapsEmbedUrl(originStr, destStr),
-    ])
-    setDistance(dist)
-    if (embed) setEmbedUrl(embed)
-  }, [])
+  // --- refresh distance + embed (directions or place mode) ------------------
+  const refreshRoute = useCallback(
+    async (lat: number | null, lng: number | null, dest: GeocodeResult) => {
+      const destStr = `${dest.lat},${dest.lng}`
+      if (lat != null && lng != null) {
+        const originStr = `${lat},${lng}`
+        const [dist, embed] = await Promise.all([
+          getDistance(originStr, destStr),
+          getMapsEmbedUrl(originStr, destStr),
+        ])
+        setDistance(dist)
+        if (embed) setEmbedUrl(embed)
+      } else {
+        const embed = await getMapsEmbedUrl(null, destStr)
+        if (embed) setEmbedUrl(embed)
+      }
+    },
+    [],
+  )
 
   useEffect(() => {
-    if (!coords || !destination) return
-    const now = Date.now()
-    // Throttle: at most one refresh every 20s.
-    if (now - lastRefreshRef.current < 20000 && distance) return
-    lastRefreshRef.current = now
-    refreshRoute(coords.latitude, coords.longitude, destination)
-  }, [coords, destination, refreshRoute, distance])
+    if (!destination) return
+    if (coords) {
+      const now = Date.now()
+      // Throttle: at most one refresh every 20s if we already have distance.
+      if (now - lastRefreshRef.current < 20000 && distance) return
+      lastRefreshRef.current = now
+      refreshRoute(coords.latitude, coords.longitude, destination)
+    } else if (!embedUrl) {
+      // No GPS coordinates available yet (or denied): request embed URL in place mode so the pro sees a map.
+      refreshRoute(null, null, destination)
+    }
+  }, [coords, destination, refreshRoute, distance, embedUrl])
 
   // --- derived values -------------------------------------------------------
   const destLat = destination?.lat ?? job?.latitude

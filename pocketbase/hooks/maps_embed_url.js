@@ -4,9 +4,9 @@
 // inside the signed embed URL that the browser loads as an <iframe src>.
 //
 // POST /backend/v1/maps/embed-url   (auth required)
-//   body: { origin: "lat,lng", destination: "lat,lng" | address }
+//   body: { origin?: "lat,lng", destination: "lat,lng" | address }
 //
-// Returns: { ok: true, url: "https://www.google.com/maps/embed/v1/directions?..." }
+// Returns: { ok: true, url: "https://www.google.com/maps/embed/v1/directions?..." | ".../place?..." }
 //
 // NOTE (hooks run in a separate VM): all logic is inlined inside the callback.
 
@@ -22,8 +22,8 @@ routerAdd(
     const body = e.requestInfo().body || {}
     const origin = (body.origin || '').toString().trim()
     const destination = (body.destination || '').toString().trim()
-    if (!origin || !destination) {
-      return e.json(400, { ok: false, error: 'Origem e destino são obrigatórios.' })
+    if (!destination) {
+      return e.json(400, { ok: false, error: 'Destino é obrigatório.' })
     }
 
     const apiKey = $os.getenv('GOOGLE_MAPS_API_KEY') || ''
@@ -35,14 +35,20 @@ routerAdd(
       return encodeURIComponent(s)
     }
 
-    const url =
-      'https://www.google.com/maps/embed/v1/directions?key=' +
-      enc(apiKey) +
-      '&origin=' +
-      enc(origin) +
-      '&destination=' +
-      enc(destination) +
-      '&mode=driving'
+    let url = ''
+    if (origin) {
+      url =
+        'https://www.google.com/maps/embed/v1/directions?key=' +
+        enc(apiKey) +
+        '&origin=' +
+        enc(origin) +
+        '&destination=' +
+        enc(destination) +
+        '&mode=driving'
+    } else {
+      url =
+        'https://www.google.com/maps/embed/v1/place?key=' + enc(apiKey) + '&q=' + enc(destination)
+    }
 
     return e.json(200, { ok: true, url: url })
   },

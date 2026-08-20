@@ -99,19 +99,25 @@ export function haversineKm(
 }
 
 /**
- * Build a Google Maps Embed API `directions` iframe URL for an origin and
- * destination. The API key is kept server-side, so this calls the
- * `/backend/v1/maps/embed-url` proxy which returns the full signed URL ready
- * to use as an <iframe src>. Returns null on failure.
- *
- * Both `origin` and `destination` accept either "lat,lng" strings or addresses.
+ * Build a Google Maps Embed API iframe URL.
+ * - When `origin` is provided: generates a `directions` embed showing the route.
+ * - When `origin` is omitted/empty: generates a `place` embed centered on the destination.
+ * The API key is kept server-side, so this calls the `/backend/v1/maps/embed-url` proxy.
+ * Returns null on failure.
  */
-export async function getMapsEmbedUrl(origin: string, destination: string): Promise<string | null> {
-  if (!origin || !destination) return null
+export async function getMapsEmbedUrl(
+  origin: string | null | undefined,
+  destination: string,
+): Promise<string | null> {
+  if (!destination) return null
   try {
+    const body: { destination: string; origin?: string } = { destination }
+    if (origin) {
+      body.origin = origin
+    }
     const res = await pb.send('/backend/v1/maps/embed-url', {
       method: 'POST',
-      body: { origin, destination },
+      body,
     })
     if (res && res.ok && res.url) return res.url as string
     return null
