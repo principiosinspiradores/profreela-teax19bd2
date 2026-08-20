@@ -27,9 +27,11 @@ import {
   Ban,
   RotateCcw,
   Star,
+  Phone,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { getUsers, updateUser } from '@/services/api'
+import { formatPhoneNumber } from '@/lib/phone'
 
 type Role = 'admin' | 'pro' | 'client'
 type Status = 'active' | 'pending' | 'blocked'
@@ -267,6 +269,7 @@ export default function AdminUsers() {
                   <TableRow>
                     <TableHead>Nome</TableHead>
                     <TableHead>Email</TableHead>
+                    <TableHead>Telefone</TableHead>
                     <TableHead>Perfil</TableHead>
                     <TableHead>Avaliação</TableHead>
                     <TableHead>Status</TableHead>
@@ -279,6 +282,16 @@ export default function AdminUsers() {
                     <TableRow key={user.id}>
                       <TableCell className="font-medium">{user.name || '-'}</TableCell>
                       <TableCell className="text-muted-foreground">{user.email}</TableCell>
+                      <TableCell className="text-xs font-mono">
+                        {user.phone ? (
+                          <span className="flex items-center gap-1 text-slate-700">
+                            <Phone className="h-3 w-3 text-muted-foreground" />
+                            {formatPhoneNumber(user.phone)}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">-</span>
+                        )}
+                      </TableCell>
                       <TableCell>
                         <Select
                           value={user.role}

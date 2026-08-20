@@ -131,6 +131,53 @@ export const getNearbyPros = async () => {
   return list.filter((u: any) => !u.suspended)
 }
 
+export interface AntiDisintermediationAlert {
+  id: string
+  type: 'high_frequency_completed' | 'short_duration_completed' | 'short_interval_recurrent'
+  severity: 'high' | 'medium' | 'low'
+  title: string
+  description: string
+  clientId: string
+  clientName: string
+  clientPhone?: string
+  proId: string
+  proName: string
+  proPhone?: string
+  jobId?: string
+  jobIds?: string[]
+  totalJobsTogether?: number
+  completedJobsTogether?: number
+  durationMinutes?: number
+  firstJobDate?: string
+  lastJobDate?: string
+}
+
+/**
+ * Fetch anti-disintermediation alerts (Admin only).
+ */
+export async function getAntiDisintermediationAlerts(): Promise<{
+  ok: boolean
+  count: number
+  alerts: AntiDisintermediationAlert[]
+}> {
+  return await pb.send('/backend/v1/admin/anti-disintermediation-alerts', {
+    method: 'GET',
+  })
+}
+
+/**
+ * Admin emergency manual release of pro's phone for a specific job/client.
+ */
+export async function adminUnlockPhone(
+  jobId: string,
+  unlocked = true,
+): Promise<{ ok: boolean; jobId: string; unlocked: boolean; message: string }> {
+  return await pb.send('/backend/v1/admin/unlock-phone', {
+    method: 'POST',
+    body: { jobId, unlocked },
+  })
+}
+
 /** Cancellation audit rows for a given user (used for the monthly reincidence counter). */
 export const getCancellationsByUser = (userId: string) =>
   pb.collection('cancellations').getFullList({

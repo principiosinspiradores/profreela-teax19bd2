@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-20T18:18:37.191Z",
+  "generatedAt": "2026-08-20T18:36:22.678Z",
   "collections": [
     {
       "name": "users",
@@ -359,6 +359,12 @@
             "cancelled",
             "refunded"
           ]
+        },
+        {
+          "name": "phone_unlocked_for_client",
+          "type": "bool",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": []

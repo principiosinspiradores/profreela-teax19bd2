@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Send, MessageCircle, Check, CheckCheck, Loader2 } from 'lucide-react'
+import { ArrowLeft, Send, MessageCircle, Check, CheckCheck, Loader2, Phone } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
@@ -10,6 +10,7 @@ import { useRealtime } from '@/hooks/use-realtime'
 import pb from '@/lib/pocketbase/client'
 import { getJob } from '@/services/api'
 import { getAvatarUrl } from '@/lib/avatar'
+import { getProPhoneForClient, canClientViewRealPhone } from '@/lib/phone'
 import {
   isChatAvailable,
   isChatExpired,
@@ -261,9 +262,25 @@ export default function ChatPage() {
         />
         <div className="flex-1 min-w-0">
           <p className="font-semibold truncate">{otherName}</p>
-          <Badge variant="secondary" className="text-xs">
-            {statusLabel(job.status)}
-          </Badge>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge variant="secondary" className="text-xs">
+              {statusLabel(job.status)}
+            </Badge>
+            {user?.id === job.customer_id && otherUser?.phone && (
+              <span className="text-xs text-muted-foreground flex items-center gap-1 font-mono">
+                <Phone className="h-3 w-3" />
+                {getProPhoneForClient(otherUser.phone, job)}
+                {canClientViewRealPhone(job) && (
+                  <Badge
+                    variant="outline"
+                    className="text-[10px] py-0 px-1 border-green-300 text-green-700 bg-green-50"
+                  >
+                    Liberado
+                  </Badge>
+                )}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 

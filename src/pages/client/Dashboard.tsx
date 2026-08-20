@@ -1,6 +1,16 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { PlusCircle, Clock, Shield, MapPin, AlertTriangle, Ban, Star, Users } from 'lucide-react'
+import {
+  PlusCircle,
+  Clock,
+  Shield,
+  MapPin,
+  AlertTriangle,
+  Ban,
+  Star,
+  Users,
+  Phone,
+} from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -37,6 +47,7 @@ import { ReviewDialog } from '@/components/ReviewDialog'
 import { formatScheduledSlot } from '@/lib/scheduling'
 import { useUnreadMessages } from '@/hooks/use-unread-messages'
 import { MessageCircle } from 'lucide-react'
+import { getProPhoneForClient, canClientViewRealPhone } from '@/lib/phone'
 // `Link` is already imported from react-router-dom at the top of this file.
 
 export default function ClientDashboard() {
@@ -297,16 +308,34 @@ export default function ClientDashboard() {
                       </div>
                     )}
                     {job.expand?.pro_id || job.pro_id ? (
-                      <div className="flex items-center gap-3 mt-4 pt-4 border-t">
-                        <img
-                          src={getAvatarUrl(job.expand?.pro_id || { id: job.pro_id }, 128)}
-                          className="w-8 h-8 rounded-full"
-                          alt="Pro"
-                        />
-                        <span className="text-sm font-medium">
-                          {job.expand?.pro_id?.name || 'Profissional'}
-                        </span>
-                        <div className="ml-auto flex items-center gap-2">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mt-4 pt-4 border-t">
+                        <div className="flex items-center gap-3">
+                          <img
+                            src={getAvatarUrl(job.expand?.pro_id || { id: job.pro_id }, 128)}
+                            className="w-8 h-8 rounded-full"
+                            alt="Pro"
+                          />
+                          <div>
+                            <span className="text-sm font-medium block">
+                              {job.expand?.pro_id?.name || 'Profissional'}
+                            </span>
+                            {job.expand?.pro_id?.phone && (
+                              <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                <Phone className="h-3 w-3" />
+                                {getProPhoneForClient(job.expand.pro_id.phone, job)}
+                                {canClientViewRealPhone(job) && (
+                                  <Badge
+                                    variant="outline"
+                                    className="text-[10px] py-0 px-1 border-green-300 text-green-700 bg-green-50"
+                                  >
+                                    Liberado
+                                  </Badge>
+                                )}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
                           {(job.status === 'accepted' || job.status === 'in_progress') && (
                             <Button asChild variant="link" size="sm" className="h-auto py-0">
                               <Link to={`/chat/${job.id}`}>
@@ -402,7 +431,11 @@ export default function ClientDashboard() {
                     <div className="min-w-0">
                       <p className="font-semibold">{job.expand?.service_id?.name || 'Serviço'}</p>
                       <p className="text-sm text-muted-foreground truncate">
-                        {job.expand?.pro_id?.name || 'Profissional'} · {job.address}
+                        {job.expand?.pro_id?.name || 'Profissional'}
+                        {job.expand?.pro_id?.phone
+                          ? ` · Tel: ${getProPhoneForClient(job.expand.pro_id.phone, job)}`
+                          : ''}
+                        {' · ' + job.address}
                       </p>
                     </div>
                     {hasPro && (

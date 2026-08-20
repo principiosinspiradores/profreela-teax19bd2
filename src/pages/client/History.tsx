@@ -9,7 +9,7 @@ import {
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Download, Star } from 'lucide-react'
+import { Download, Star, Phone } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { getClientJobs } from '@/services/api'
 import { getReviewsByAuthor, type Review } from '@/services/reviews'
@@ -17,6 +17,7 @@ import { RatingStars } from '@/components/RatingStars'
 import { ReviewDialog } from '@/components/ReviewDialog'
 import { format } from 'date-fns'
 import { PaymentStatusBadge } from '@/components/PaymentStatusBadge'
+import { getProPhoneForClient, canClientViewRealPhone } from '@/lib/phone'
 
 export default function ClientHistory() {
   const { user } = useAuth()
@@ -78,7 +79,23 @@ export default function ClientHistory() {
                   <TableCell>{format(new Date(job.created), 'dd/MM/yyyy')}</TableCell>
                   <TableCell>{job.expand?.service_id?.name}</TableCell>
                   <TableCell>
-                    <div className="flex items-center gap-2">{job.expand?.pro_id?.name || '-'}</div>
+                    <div className="flex flex-col gap-0.5">
+                      <span className="font-medium">{job.expand?.pro_id?.name || '-'}</span>
+                      {job.expand?.pro_id?.phone && (
+                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Phone className="h-3 w-3" />
+                          {getProPhoneForClient(job.expand.pro_id.phone, job)}
+                          {canClientViewRealPhone(job) && (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] py-0 px-1 border-green-300 text-green-700 bg-green-50"
+                            >
+                              Liberado
+                            </Badge>
+                          )}
+                        </span>
+                      )}
+                    </div>
                   </TableCell>
                   <TableCell>{job.hours ? `${job.hours}h` : '-'}</TableCell>
                   <TableCell>
