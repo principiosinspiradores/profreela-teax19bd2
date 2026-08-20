@@ -565,7 +565,7 @@ export default function RequestService() {
             </DialogDescription>
           </DialogHeader>
           <Checkout
-            amount={unitPrice}
+            amount={totalPrice}
             description={`Serviço ProFreela — ${activeService?.name ?? ''}`}
             onPaid={createJobsAfterPayment}
             confirmLabel="Pagar e solicitar"
