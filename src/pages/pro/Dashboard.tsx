@@ -365,7 +365,7 @@ export default function ProDashboard() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-8rem)] relative rounded-xl overflow-hidden border">
+    <div className="flex flex-col h-[calc(100vh-8rem)] relative rounded-xl overflow-y-auto border">
       {/* Geometric street-grid background */}
       <div
         aria-hidden
