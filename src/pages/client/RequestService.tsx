@@ -203,13 +203,17 @@ export default function RequestService() {
       // Auto-save the address used so it reappears on the dashboard card and
       // can be reused on the next request. Best-effort — never blocks the flow.
       try {
-        await createSavedLocation({
-          client_id: user.id,
-          label: pendingPayload.address,
-          address: pendingPayload.address,
-          latitude: pendingPayload.latitude,
-          longitude: pendingPayload.longitude,
-        })
+        // Antes de criar, verifica duplicata
+        const alreadyExists = savedLocations.some((loc) => loc.address === pendingPayload.address)
+        if (!alreadyExists) {
+          await createSavedLocation({
+            client_id: user.id,
+            label: pendingPayload.address,
+            address: pendingPayload.address,
+            latitude: pendingPayload.latitude,
+            longitude: pendingPayload.longitude,
+          })
+        }
       } catch {
         // ignore — location saving is non-critical
       }
