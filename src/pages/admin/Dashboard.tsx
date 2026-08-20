@@ -44,6 +44,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Link } from 'react-router-dom'
 import {
   getModerationLogs,
   createModerationLog,
@@ -51,9 +52,11 @@ import {
   updateDocument,
   updateUser,
   getAntiDisintermediationAlerts,
+  getChatDisintermediationAlerts,
   adminUnlockPhone,
   getJobs,
   type AntiDisintermediationAlert,
+  type ChatDisintermediationAlert,
 } from '@/services/api'
 import { formatPhoneNumber } from '@/lib/phone'
 import { useToast } from '@/hooks/use-toast'
@@ -76,6 +79,7 @@ export default function AdminDashboard() {
   const [logs, setLogs] = useState<any[]>([])
   const [documents, setDocuments] = useState<any[]>([])
   const [alerts, setAlerts] = useState<AntiDisintermediationAlert[]>([])
+  const [chatAlerts, setChatAlerts] = useState<ChatDisintermediationAlert[]>([])
   const [loadingAlerts, setLoadingAlerts] = useState(false)
   const [jobs, setJobs] = useState<any[]>([])
   const [loadingJobs, setLoadingJobs] = useState(false)
@@ -95,9 +99,15 @@ export default function AdminDashboard() {
   const loadAlerts = async () => {
     setLoadingAlerts(true)
     try {
-      const res = await getAntiDisintermediationAlerts()
+      const [res, cAlerts] = await Promise.all([
+        getAntiDisintermediationAlerts().catch(() => ({ ok: false, count: 0, alerts: [] })),
+        getChatDisintermediationAlerts().catch(() => []),
+      ])
       if (res && res.alerts) {
         setAlerts(res.alerts)
+      }
+      if (cAlerts) {
+        setChatAlerts(cAlerts)
       }
     } catch (err: any) {
       console.error('Failed to load alerts', err)
@@ -129,6 +139,9 @@ export default function AdminDashboard() {
   useRealtime('jobs', () => {
     loadAlerts()
     loadAllJobs()
+  })
+  useRealtime('disintermediation_alerts', () => {
+    loadAlerts()
   })
 
   const handleToggleUnlockPhone = async (jobId: string, currentUnlocked: boolean) => {
@@ -198,9 +211,9 @@ export default function AdminDashboard() {
           <TabsTrigger value="documents">Verificação de Documentos</TabsTrigger>
           <TabsTrigger value="alerts" className="relative">
             Anti-Desintermediação
-            {alerts.length > 0 && (
+            {alerts.length + chatAlerts.length > 0 && (
               <Badge variant="destructive" className="ml-2 px-1.5 py-0 text-[10px] h-4">
-                {alerts.length}
+                {alerts.length + chatAlerts.length}
               </Badge>
             )}
           </TabsTrigger>
@@ -411,16 +424,17 @@ export default function AdminDashboard() {
 
         {/* Anti-Disintermediation Alerts Tab */}
         <TabsContent value="alerts" className="space-y-6">
+          {/* Section 1: Chat Disintermediation Alerts */}
           <Card>
             <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3">
               <div>
-                <CardTitle className="flex items-center gap-2 text-xl">
+                <CardTitle className="flex items-center gap-2 text-xl text-red-600">
                   <ShieldAlert className="h-5 w-5 text-red-600" />
-                  Alertas de Reincidência e Anti-Desintermediação
+                  Alertas de Chat (Tentativas de Contato Externo)
                 </CardTitle>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Monitoramento automático de padrões suspeitos de contratação direta fora da
-                  plataforma.
+                  Escaneamento automático em tempo real nas mensagens do chat. Registros gerados a
+                  partir da 2ª detecção (reincidência) por serviço.
                 </p>
               </div>
               <Button
@@ -431,8 +445,139 @@ export default function AdminDashboard() {
                 className="gap-2 shrink-0"
               >
                 <RefreshCw className={`h-4 w-4 ${loadingAlerts ? 'animate-spin' : ''}`} />
-                Atualizar Alertas
+                Atualizar
               </Button>
+            </CardHeader>
+            <CardContent>
+              {loadingAlerts ? (
+                <div className="flex items-center justify-center py-10 text-muted-foreground">
+                  <Loader2 className="h-6 w-6 animate-spin mr-2" /> Carregando alertas de chat...
+                </div>
+              ) : chatAlerts.length === 0 ? (
+                <div className="text-center py-8 border border-dashed rounded-lg bg-muted/20">
+                  <ShieldAlert className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-50" />
+                  <p className="font-medium text-foreground">
+                    Nenhuma reincidência de contato no chat
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Nenhuma violação grave registrada nos chats monitorados.
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded-md border overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Data/Hora</TableHead>
+                        <TableHead>Serviço</TableHead>
+                        <TableHead>Profissional</TableHead>
+                        <TableHead>Cliente</TableHead>
+                        <TableHead>Padrão Detectado</TableHead>
+                        <TableHead>Trecho da Mensagem</TableHead>
+                        <TableHead className="text-right">Ação</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {chatAlerts.map((ca) => {
+                        const proUser = ca.expand?.pro_id
+                        const clientUser = ca.expand?.client_id
+                        const jobData = ca.expand?.job
+                        const serviceName = jobData?.expand?.service_id?.name || 'Serviço'
+
+                        return (
+                          <TableRow key={ca.id} className="bg-red-50/30">
+                            <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                              <span className="flex items-center gap-1">
+                                <Calendar className="h-3 w-3" />
+                                {new Date(ca.created).toLocaleDateString('pt-BR')}{' '}
+                                {new Date(ca.created).toLocaleTimeString('pt-BR', {
+                                  hour: '2-digit',
+                                  minute: '2-digit',
+                                })}
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              <div>
+                                <span className="font-medium text-xs block">{serviceName}</span>
+                                <span className="font-mono text-[11px] text-muted-foreground">
+                                  #{ca.job ? ca.job.slice(0, 6) : '-'}
+                                </span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="text-xs">
+                                <span className="font-medium block">
+                                  {proUser?.name || 'Profissional'}
+                                </span>
+                                {proUser?.phone && (
+                                  <span className="font-mono text-[11px] text-muted-foreground flex items-center gap-1">
+                                    <Phone className="h-3 w-3" />
+                                    {formatPhoneNumber(proUser.phone)}
+                                  </span>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="text-xs">
+                                <span className="font-medium block">
+                                  {clientUser?.name || 'Cliente'}
+                                </span>
+                                {clientUser?.phone && (
+                                  <span className="font-mono text-[11px] text-muted-foreground flex items-center gap-1">
+                                    <Phone className="h-3 w-3" />
+                                    {formatPhoneNumber(clientUser.phone)}
+                                  </span>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="destructive" className="text-[11px] font-mono">
+                                {ca.pattern_matched || 'contato externo'}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="max-w-xs">
+                              <div className="p-2 bg-background border rounded text-xs text-red-950 font-mono break-words">
+                                "{ca.detected_content}"
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {ca.job && (
+                                <Button
+                                  asChild
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-xs gap-1"
+                                >
+                                  <Link to={`/chat/${ca.job}`} target="_blank">
+                                    <ExternalLink className="h-3.5 w-3.5" />
+                                    Abrir Chat
+                                  </Link>
+                                </Button>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Section 2: Pattern-based Disintermediation Alerts */}
+          <Card>
+            <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-xl">
+                  <ShieldAlert className="h-5 w-5 text-amber-600" />
+                  Alertas de Padrão e Histórico de Serviços
+                </CardTitle>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Monitoramento de pares recorrentes, jobs com duração suspeita (&lt; 15 min) e
+                  solicitações frequentes em 7 dias.
+                </p>
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-3 sm:grid-cols-3 text-sm">
@@ -466,9 +611,7 @@ export default function AdminDashboard() {
               ) : alerts.length === 0 ? (
                 <div className="text-center py-12 border border-dashed rounded-lg bg-muted/20">
                   <ShieldAlert className="h-10 w-10 text-muted-foreground mx-auto mb-2 opacity-50" />
-                  <p className="font-medium text-foreground">
-                    Nenhum alerta de desintermediação detectado
-                  </p>
+                  <p className="font-medium text-foreground">Nenhum alerta de padrão detectado</p>
                   <p className="text-sm text-muted-foreground mt-1">
                     Todos os serviços monitorados estão dentro dos padrões normais de uso.
                   </p>

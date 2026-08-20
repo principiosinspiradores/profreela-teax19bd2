@@ -293,6 +293,42 @@ export default function ChatPage() {
           </div>
         ) : (
           messages.map((msg) => {
+            const isSystemWarning =
+              msg.content?.startsWith('⚠️') ||
+              msg.content?.startsWith('🚨') ||
+              msg.content?.includes('ProFreela oferece chat seguro') ||
+              msg.content?.includes('Sua conversa está sendo monitorada')
+
+            if (isSystemWarning) {
+              const isSevere = msg.content?.startsWith('🚨')
+              return (
+                <div key={msg.id} className="flex justify-center my-3">
+                  <div
+                    className={`max-w-[90%] sm:max-w-[80%] rounded-xl px-4 py-3 border text-xs sm:text-sm shadow-sm ${
+                      isSevere
+                        ? 'bg-red-50/90 border-red-300 text-red-900 font-medium'
+                        : 'bg-amber-50/90 border-amber-300 text-amber-900'
+                    }`}
+                  >
+                    <div className="flex items-start gap-2">
+                      <span className="text-base select-none">{isSevere ? '🚨' : '⚠️'}</span>
+                      <div className="flex-1 space-y-1">
+                        <p className="font-semibold text-[11px] uppercase tracking-wide opacity-80">
+                          {isSevere
+                            ? 'Aviso de Segurança — Monitoramento'
+                            : 'Aviso do Sistema ProFreela'}
+                        </p>
+                        <p className="whitespace-pre-wrap break-words">{msg.content}</p>
+                        <p className="text-[10px] opacity-60 text-right">
+                          {formatTime(msg.created)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )
+            }
+
             const isOwn = msg.sender === user?.id
             return (
               <div key={msg.id} className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}>

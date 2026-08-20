@@ -152,6 +152,22 @@ export interface AntiDisintermediationAlert {
   lastJobDate?: string
 }
 
+export interface ChatDisintermediationAlert {
+  id: string
+  job: string
+  pro_id?: string
+  client_id?: string
+  detected_content: string
+  pattern_matched?: string
+  created: string
+  updated: string
+  expand?: {
+    job?: any
+    pro_id?: any
+    client_id?: any
+  }
+}
+
 /**
  * Fetch anti-disintermediation alerts (Admin only).
  */
@@ -162,6 +178,16 @@ export async function getAntiDisintermediationAlerts(): Promise<{
 }> {
   return await pb.send('/backend/v1/admin/anti-disintermediation-alerts', {
     method: 'GET',
+  })
+}
+
+/**
+ * Fetch chat disintermediation alerts from the `disintermediation_alerts` collection (Admin only).
+ */
+export async function getChatDisintermediationAlerts(): Promise<ChatDisintermediationAlert[]> {
+  return await pb.collection('disintermediation_alerts').getFullList<ChatDisintermediationAlert>({
+    expand: 'job,job.service_id,pro_id,client_id',
+    sort: '-created',
   })
 }
 
