@@ -206,13 +206,14 @@ export default function RequestService() {
         // Antes de criar, verifica duplicata
         const alreadyExists = savedLocations.some((loc) => loc.address === pendingPayload.address)
         if (!alreadyExists) {
-          await createSavedLocation({
+          const newLoc = await createSavedLocation({
             client_id: user.id,
             label: pendingPayload.address,
             address: pendingPayload.address,
             latitude: pendingPayload.latitude,
             longitude: pendingPayload.longitude,
           })
+          setSavedLocations((prev) => [...prev, newLoc])
         }
       } catch {
         // ignore — location saving is non-critical

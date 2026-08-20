@@ -19,9 +19,9 @@ export const getSavedLocations = (clientId: string) =>
   }) as Promise<SavedLocation[]>
 
 export const createSavedLocation = (data: Partial<SavedLocation>) =>
-  pb.collection('saved_locations').create(data)
+  pb.collection('saved_locations').create<SavedLocation>(data)
 
 export const updateSavedLocation = (id: string, data: Partial<SavedLocation>) =>
-  pb.collection('saved_locations').update(id, data)
+  pb.collection('saved_locations').update<SavedLocation>(id, data)
 
 export const deleteSavedLocation = (id: string) => pb.collection('saved_locations').delete(id)
