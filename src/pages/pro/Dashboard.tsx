@@ -608,12 +608,27 @@ export default function ProDashboard() {
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            <div className="flex justify-between items-center bg-muted/50 p-4 rounded-xl">
-              <span className="text-muted-foreground">Valor Estimado</span>
-              <span className="text-2xl font-bold text-secondary">
-                R$ {pendingJob?.price?.toFixed(2)}
-              </span>
-            </div>
+            {(() => {
+              // Valor líquido que o profissional recebe = labourCost × emergencyMultiplier.
+              // O `labourCost` é reconstituído a partir dos campos do job (service
+              // base_price × hourMultiplier × hours), da mesma forma que o preço
+              // foi calculado no RequestService. O `job.price` (valor bruto com
+              // deslocamento pago pelo cliente) NÃO é exibido neste dialog.
+              const svcPrice = pendingJob?.expand?.service_id?.base_price
+              const hrs = Number(pendingJob?.hours) || 0
+              const mult = getHourMultiplier(hrs, settings)
+              const labourCost = svcPrice ? svcPrice * mult * hrs : 0
+              const emergencyMultiplier = pendingJob?.type === 'emergency' ? 1.2 : 1.0
+              const proEarnings = labourCost * emergencyMultiplier
+              return (
+                <div className="flex justify-between items-center bg-muted/50 p-4 rounded-xl">
+                  <span className="text-muted-foreground">Você recebe</span>
+                  <span className="text-2xl font-bold text-secondary">
+                    R$ {proEarnings.toFixed(2)}
+                  </span>
+                </div>
+              )
+            })()}
 
             {pendingJob?.hours ? (
               <>
