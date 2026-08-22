@@ -238,7 +238,7 @@ const SECTIONS = [
             </a>
             ;
           </li>
-          <li>Foro do domicílio do consumidor.</li>
+          <li>Foro da comarca de Campinas, Estado de São Paulo.</li>
         </ul>
       </div>
     ),
