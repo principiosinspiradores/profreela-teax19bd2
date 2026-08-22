@@ -48,6 +48,7 @@ import { formatScheduledSlot } from '@/lib/scheduling'
 import { useUnreadMessages } from '@/hooks/use-unread-messages'
 import { MessageCircle } from 'lucide-react'
 import { getProPhoneForClient, canClientViewRealPhone } from '@/lib/phone'
+import { ProDelayDialog } from '@/components/ProDelayDialog'
 // `Link` is already imported from react-router-dom at the top of this file.
 
 export default function ClientDashboard() {
@@ -95,6 +96,16 @@ export default function ClientDashboard() {
 
   const activeJobs = jobs.filter((j) => ['pending', 'accepted', 'in_progress'].includes(j.status))
   const completedJobs = jobs.filter((j) => j.status === 'completed')
+
+  // Jobs where the professional is +15 min late and the client must answer
+  // (cron arms `delay_notification_sent`; the client decides via ProDelayDialog).
+  const pendingDelayJobs = jobs.filter(
+    (j) =>
+      j.status === 'accepted' &&
+      j.delay_notification_sent === true &&
+      !j.client_delay_response &&
+      !j.extended,
+  )
 
   const handleConfirmCancel = async () => {
     if (!cancelJobState) return
@@ -465,6 +476,10 @@ export default function ClientDashboard() {
         onOpenChange={(o) => !o && setReviewJob(null)}
         onReviewed={loadData}
       />
+
+      {/* Professional-delay flow: the pro is +15 min late and the client must
+          choose to extend the deadline (1h/2h) or cancel + reopen as emergency. */}
+      <ProDelayDialog jobs={pendingDelayJobs} onResolved={loadData} />
 
       {/* Cancellation modal */}
       <Dialog

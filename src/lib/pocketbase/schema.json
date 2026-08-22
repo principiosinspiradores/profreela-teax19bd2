@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-22T11:30:47.157Z",
+  "generatedAt": "2026-08-22T11:59:23.174Z",
   "collections": [
     {
       "name": "users",
@@ -363,6 +363,55 @@
         {
           "name": "phone_unlocked_for_client",
           "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "extended",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "extension_minutes",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "delay_notification_sent",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "delay_notified_at",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "client_delay_response",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["extend_1h", "extend_2h", "cancel_reopen"]
+        },
+        {
+          "name": "client_delay_responded_at",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "emergency_fee",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "client_price",
+          "type": "number",
           "required": false,
           "system": false
         }
