@@ -38,6 +38,15 @@ routerAdd(
       return e.json(404, { ok: false, error: 'Serviço não encontrado.' })
     }
 
+    // Impede cancelamento quando o pagamento já está em disputa
+    const paymentStatus = job.getString('payment_status')
+    if (paymentStatus === 'disputed') {
+      return e.json(400, {
+        ok: false,
+        error: 'Não é possível cancelar um serviço que está em disputa. Aguarde a resolução.',
+      })
+    }
+
     const jobStatus = job.getString('status')
     if (jobStatus === 'cancelled') {
       return e.json(400, { ok: false, error: 'Este serviço já foi cancelado.' })
@@ -209,7 +218,6 @@ routerAdd(
 
     // --- attempt to charge the client penalty from the pre-authorization ----
     // (Stripe only; demo / Mercado Pago leave it as a pending debt.)
-    const paymentStatus = job.getString('payment_status')
     const intentId = job.getString('payment_intent_id')
     const provider = $os.getenv('PAYMENT_PROVIDER') || ''
 

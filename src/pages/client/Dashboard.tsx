@@ -346,19 +346,20 @@ export default function ClientDashboard() {
                               </Link>
                             </Button>
                           )}
-                          {(job.status === 'pending' || job.status === 'accepted') && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="text-red-700 border-red-300 hover:bg-red-50"
-                              onClick={() => {
-                                setCancelJobState(job)
-                                setCancelReason('')
-                              }}
-                            >
-                              <Ban className="h-4 w-4 mr-1" /> Cancelar Serviço
-                            </Button>
-                          )}
+                          {(job.status === 'pending' || job.status === 'accepted') &&
+                            job.payment_status !== 'disputed' && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="text-red-700 border-red-300 hover:bg-red-50"
+                                onClick={() => {
+                                  setCancelJobState(job)
+                                  setCancelReason('')
+                                }}
+                              >
+                                <Ban className="h-4 w-4 mr-1" /> Cancelar Serviço
+                              </Button>
+                            )}
                         </div>
                       </div>
                     ) : (
@@ -373,19 +374,20 @@ export default function ClientDashboard() {
                             </Link>
                           </Button>
                         )}
-                        {(job.status === 'pending' || job.status === 'accepted') && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="text-red-700 border-red-300 hover:bg-red-50"
-                            onClick={() => {
-                              setCancelJobState(job)
-                              setCancelReason('')
-                            }}
-                          >
-                            <Ban className="h-4 w-4 mr-1" /> Cancelar Serviço
-                          </Button>
-                        )}
+                        {(job.status === 'pending' || job.status === 'accepted') &&
+                          job.payment_status !== 'disputed' && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-red-700 border-red-300 hover:bg-red-50"
+                              onClick={() => {
+                                setCancelJobState(job)
+                                setCancelReason('')
+                              }}
+                            >
+                              <Ban className="h-4 w-4 mr-1" /> Cancelar Serviço
+                            </Button>
+                          )}
                       </div>
                     )}{' '}
                     {job.payment_status === 'held' && (
