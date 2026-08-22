@@ -59,11 +59,13 @@ import {
   getJobs,
   getProsWithPenalty,
   getPenaltyJobs,
+  getProForModeration,
   forgivePenalty,
   type AntiDisintermediationAlert,
   type ChatDisintermediationAlert,
 } from '@/services/api'
 import { formatPhoneNumber } from '@/lib/phone'
+import { getAvatarUrl } from '@/lib/avatar'
 import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
 
@@ -100,6 +102,12 @@ export default function AdminDashboard() {
   const [penaltyJobs, setPenaltyJobs] = useState<any[]>([])
   const [loadingPenalties, setLoadingPenalties] = useState(false)
   const [forgivingProId, setForgivingProId] = useState<string | null>(null)
+
+  // Real professional shown in the "Moderação de Profissionais" card. Falls
+  // back to null when there is no pro in the base, in which case the
+  // Advertir/Bloquear buttons are hidden.
+  const [moderationPro, setModerationPro] = useState<any | null>(null)
+  const [moderating, setModerating] = useState(false)
 
   const { toast } = useToast()
 
@@ -184,12 +192,18 @@ export default function AdminDashboard() {
     }
   }
 
+  const loadModerationPro = async () => {
+    const pro = await getProForModeration()
+    setModerationPro(pro)
+  }
+
   useEffect(() => {
     getModerationLogs().then(setLogs)
     loadDocs()
     loadAlerts()
     loadAllJobs()
     loadPenalties()
+    loadModerationPro()
   }, [])
 
   useRealtime('documents', loadDocs)
@@ -231,8 +245,29 @@ export default function AdminDashboard() {
   }
 
   const handleAction = async (type: string) => {
-    await createModerationLog({ pro_id: 'sample', type, reason: 'Manual review' })
-    toast({ title: 'Ação executada', description: `Usuário marcado com ${type}.` })
+    if (!moderationPro?.id) return
+    setModerating(true)
+    try {
+      await createModerationLog({
+        pro_id: moderationPro.id,
+        type,
+        reason: 'Manual review',
+      })
+      toast({
+        title: 'Ação executada',
+        description: `${moderationPro.name || 'Profissional'} marcado com ${type}.`,
+      })
+      // Refresh logs so the new entry appears.
+      getModerationLogs().then(setLogs)
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao executar ação',
+        description: err?.message || 'Não foi possível registrar a moderação.',
+        variant: 'destructive',
+      })
+    } finally {
+      setModerating(false)
+    }
   }
 
   const handleVerify = async (doc: any, approved: boolean) => {
@@ -365,23 +400,44 @@ export default function AdminDashboard() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex items-center justify-between border-b pb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center">
-                      <Users className="h-5 w-5 text-muted-foreground" />
+                  {moderationPro ? (
+                    <>
+                      <div className="flex items-center gap-3">
+                        <img
+                          src={getAvatarUrl(moderationPro)}
+                          alt={moderationPro.name || 'Profissional'}
+                          className="w-10 h-10 rounded-full object-cover bg-muted"
+                        />
+                        <div>
+                          <p className="font-medium">{moderationPro.name || 'Profissional'}</p>
+                          <p className="text-xs text-muted-foreground">Reclamação de Cliente</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={moderating}
+                          onClick={() => handleAction('warning')}
+                        >
+                          Advertir
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          disabled={moderating}
+                          onClick={() => handleAction('block')}
+                        >
+                          Bloquear
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex items-center gap-3 text-muted-foreground py-2">
+                      <Users className="h-5 w-5" />
+                      <p className="text-sm">Nenhum profissional cadastrado para moderação</p>
                     </div>
-                    <div>
-                      <p className="font-medium">Carlos E.</p>
-                      <p className="text-xs text-muted-foreground">Reclamação de Cliente</p>
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button variant="outline" size="sm" onClick={() => handleAction('warning')}>
-                      Advertir
-                    </Button>
-                    <Button variant="destructive" size="sm" onClick={() => handleAction('block')}>
-                      Bloquear
-                    </Button>
-                  </div>
+                  )}
                 </div>
 
                 <div className="mt-4">

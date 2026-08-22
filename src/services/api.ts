@@ -131,6 +131,22 @@ export const getNearbyPros = async () => {
   return list.filter((u: any) => !u.suspended)
 }
 
+/**
+ * First registered professional (role="pro") — used by the admin moderation
+ * card as the target for Advertir/Bloquear actions. Returns null when there
+ * is no professional in the base.
+ */
+export async function getProForModeration(): Promise<any | null> {
+  try {
+    const list = await pb
+      .collection('users')
+      .getList(1, 1, { filter: `role="pro"`, sort: 'created' })
+    return list?.items?.[0] || null
+  } catch {
+    return null
+  }
+}
+
 export interface AntiDisintermediationAlert {
   id: string
   type: 'high_frequency_completed' | 'short_duration_completed' | 'short_interval_recurrent'
