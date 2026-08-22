@@ -10,6 +10,7 @@ import {
   Hourglass,
   Play,
   Navigation2,
+  AlertTriangle,
 } from 'lucide-react'
 import pb from '@/lib/pocketbase/client'
 import { ClientResponseError } from 'pocketbase'
@@ -39,6 +40,7 @@ import {
   getUserDocuments,
   createDocument,
   getCancellationsByUser,
+  getProPenaltyJobs,
 } from '@/services/api'
 import { getSettings, DEFAULT_SETTINGS, type PlatformSettings } from '@/services/settings'
 import { getHourMultiplier, shortJobBand } from '@/lib/pricing'
@@ -78,6 +80,10 @@ export default function ProDashboard() {
   const [cancelReason, setCancelReason] = useState('')
   const [cancelling, setCancelling] = useState(false)
 
+  // Outstanding penalty balance + the jobs that generated it (Entrega 2).
+  const [penaltyBalance, setPenaltyBalance] = useState(0)
+  const [penaltyJobs, setPenaltyJobs] = useState<any[]>([])
+
   const navigate = useNavigate()
   const { user } = useAuth()
   const { toast } = useToast()
@@ -113,6 +119,8 @@ export default function ProDashboard() {
     if (currentPro && currentPro.blocked_until !== blockedUntilRef.current) {
       blockedUntilRef.current = currentPro.blocked_until || ''
     }
+    // Keep the penalty banner in sync with the live pro record.
+    setPenaltyBalance(Number(currentPro?.penalty_balance) || 0)
 
     const jobs = await getProJobs(user.id)
 
@@ -160,6 +168,15 @@ export default function ProDashboard() {
       )
     } catch {
       /* intentionally ignored */
+    }
+
+    // Penalty jobs (Entrega 2): jobs whose delay-driven cancel+reopen generated
+    // a debit against this pro. Shown under the yellow debt banner.
+    try {
+      const pj = await getProPenaltyJobs(user.id)
+      setPenaltyJobs(pj || [])
+    } catch {
+      setPenaltyJobs([])
     }
   }
 
@@ -418,6 +435,41 @@ export default function ProDashboard() {
 
       {/* Bottom Info Card */}
       <div className="relative z-10 mt-auto m-4 space-y-3">
+        {penaltyBalance > 0 && (
+          <Alert className="shadow-xl border-amber-300 bg-amber-50 text-amber-900">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Você possui débitos pendentes</AlertTitle>
+            <AlertDescription className="space-y-1">
+              <p>
+                Você possui <strong>R$ {penaltyBalance.toFixed(2).replace('.', ',')}</strong> em
+                débitos pendentes. Esse valor será descontado dos próximos recebimentos.
+              </p>
+              {penaltyJobs.length > 0 && (
+                <div className="mt-2 space-y-1">
+                  {penaltyJobs.map((pj) => (
+                    <div
+                      key={pj.id}
+                      className="text-xs flex items-center justify-between gap-2 border-t border-amber-200 pt-1"
+                    >
+                      <span className="truncate">
+                        {pj.expand?.service_id?.name || 'Serviço'} —{' '}
+                        {pj.cancelled_at
+                          ? new Date(pj.cancelled_at).toLocaleDateString('pt-BR')
+                          : ''}
+                      </span>
+                      <span className="font-semibold whitespace-nowrap">
+                        -R${' '}
+                        {Number(pj.penalty_amount || 0)
+                          .toFixed(2)
+                          .replace('.', ',')}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </AlertDescription>
+          </Alert>
+        )}
         {isBlocked && (
           <Alert
             variant="destructive"

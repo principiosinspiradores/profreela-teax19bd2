@@ -152,6 +152,52 @@ cronAdd('release_held_payments', '*/15 * * * *', () => {
         } catch (err) {
           console.log('[release_held_payments] falha ao notificar pro', proId, err)
         }
+
+        // --- debit outstanding penalty_balance from this payout ------------
+        // Entrega 2: when a pro has an outstanding debtor balance (from a
+        // delay-driven cancel+reopen), collect it from the released payout:
+        // debit = min(penalty_balance, payout). The pro's penalty_balance is
+        // reduced and a debit transaction notification is recorded.
+        try {
+          const proRec = $app.findFirstRecordByData('users', 'id', proId)
+          const debt = proRec.getFloat('penalty_balance') || 0
+          const payout = job.getFloat('price') || 0
+          if (debt > 0 && payout > 0) {
+            const roundedDebit = Math.round(Math.min(debt, payout) * 100) / 100
+            const newBalance = Math.max(0, Math.round((debt - roundedDebit) * 100) / 100)
+            proRec.set('penalty_balance', newBalance)
+            $app.save(proRec)
+            // Record the debit transaction as a notification.
+            try {
+              const dNotifCol = $app.findCollectionByNameOrId('notifications')
+              const dNotif = new Record(dNotifCol)
+              dNotif.set('user_id', proId)
+              dNotif.set('type', 'payment')
+              dNotif.set('title', 'Débito de penalidade aplicado')
+              dNotif.set(
+                'message',
+                'R$ ' +
+                  roundedDebit.toFixed(2).replace('.', ',') +
+                  ' foram descontados deste recebimento para abater seu saldo devedor por atraso. Saldo restante: R$ ' +
+                  newBalance.toFixed(2).replace('.', ',') +
+                  '.',
+              )
+              dNotif.set('job_id', jobId)
+              dNotif.set('read_status', false)
+              $app.save(dNotif)
+            } catch (_) {}
+            console.log(
+              '[release_held_payments] débito de penalidade — pro',
+              proId,
+              'debitado',
+              roundedDebit,
+              'saldo restante',
+              newBalance,
+            )
+          }
+        } catch (err) {
+          console.log('[release_held_payments] falha ao debitar penalty do pro', proId, err)
+        }
       }
     } catch (err) {
       console.log('[release_held_payments] erro ao salvar job', jobId, err)

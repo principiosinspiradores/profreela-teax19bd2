@@ -26,6 +26,8 @@ import {
   Clock,
   Loader2,
   RefreshCw,
+  Scale,
+  HandCoins,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -55,6 +57,9 @@ import {
   getChatDisintermediationAlerts,
   adminUnlockPhone,
   getJobs,
+  getProsWithPenalty,
+  getPenaltyJobs,
+  forgivePenalty,
   type AntiDisintermediationAlert,
   type ChatDisintermediationAlert,
 } from '@/services/api'
@@ -89,6 +94,13 @@ export default function AdminDashboard() {
     proName: string
     jobIds: string[]
   } | null>(null)
+
+  // Entrega 2 — delay-driven penalties.
+  const [penaltyPros, setPenaltyPros] = useState<any[]>([])
+  const [penaltyJobs, setPenaltyJobs] = useState<any[]>([])
+  const [loadingPenalties, setLoadingPenalties] = useState(false)
+  const [forgivingProId, setForgivingProId] = useState<string | null>(null)
+
   const { toast } = useToast()
 
   const loadDocs = async () => {
@@ -128,17 +140,63 @@ export default function AdminDashboard() {
     }
   }
 
+  // Entrega 2 — load pros with an outstanding penalty balance + the jobs that
+  // generated each debit. Falls back to empty on any error.
+  const loadPenalties = async () => {
+    setLoadingPenalties(true)
+    try {
+      const [pros, pJobs] = await Promise.all([
+        getProsWithPenalty().catch(() => []),
+        getPenaltyJobs().catch(() => []),
+      ])
+      setPenaltyPros(pros || [])
+      setPenaltyJobs(pJobs || [])
+    } catch (err) {
+      console.error('Failed to load penalties', err)
+    } finally {
+      setLoadingPenalties(false)
+    }
+  }
+
+  // Entrega 2 — forgive (zero out) a pro's outstanding penalty balance.
+  const handleForgivePenalty = async (proId: string, proName: string) => {
+    setForgivingProId(proId)
+    try {
+      const res = await forgivePenalty(proId)
+      if (!res?.ok) {
+        throw new Error(res?.error || 'Não foi possível perdoar o débito.')
+      }
+      toast({
+        title: 'Débito perdoado',
+        description: `O saldo devedor de ${proName} foi zerado${
+          res.jobs_marked ? ` (${res.jobs_marked} serviço(s) marcados como perdoados)` : ''
+        }.`,
+      })
+      loadPenalties()
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao perdoar débito',
+        description: err?.message || 'Não foi possível perdoar o débito.',
+        variant: 'destructive',
+      })
+    } finally {
+      setForgivingProId(null)
+    }
+  }
+
   useEffect(() => {
     getModerationLogs().then(setLogs)
     loadDocs()
     loadAlerts()
     loadAllJobs()
+    loadPenalties()
   }, [])
 
   useRealtime('documents', loadDocs)
   useRealtime('jobs', () => {
     loadAlerts()
     loadAllJobs()
+    loadPenalties()
   })
   useRealtime('disintermediation_alerts', () => {
     loadAlerts()
@@ -218,6 +276,14 @@ export default function AdminDashboard() {
             )}
           </TabsTrigger>
           <TabsTrigger value="phone-unlock">Liberação de Telefone</TabsTrigger>
+          <TabsTrigger value="penalties" className="relative">
+            Penalidades
+            {penaltyPros.length > 0 && (
+              <Badge variant="destructive" className="ml-2 px-1.5 py-0 text-[10px] h-4">
+                {penaltyPros.length}
+              </Badge>
+            )}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
@@ -849,6 +915,145 @@ export default function AdminDashboard() {
                       })}
                     </TableBody>
                   </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Penalties Tab — Entrega 2 */}
+        <TabsContent value="penalties" className="space-y-6">
+          <Card>
+            <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-xl">
+                  <Scale className="h-5 w-5 text-amber-600" />
+                  Penalidades por Atraso (Débitos Pendentes)
+                </CardTitle>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Profissionais que causaram cancelamento por atraso (+15 min) e geraram uma
+                  reabertura emergencial. A diferença de 20% do emergencial é debitada do próximo
+                  recebimento do profissional.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={loadPenalties}
+                disabled={loadingPenalties}
+                className="gap-2 shrink-0"
+              >
+                <RefreshCw className={`h-4 w-4 ${loadingPenalties ? 'animate-spin' : ''}`} />
+                Atualizar
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {loadingPenalties ? (
+                <div className="flex items-center justify-center py-12 text-muted-foreground">
+                  <Loader2 className="h-6 w-6 animate-spin mr-2" /> Carregando penalidades...
+                </div>
+              ) : penaltyPros.length === 0 ? (
+                <div className="text-center py-12 border border-dashed rounded-lg bg-muted/20">
+                  <Scale className="h-10 w-10 text-muted-foreground mx-auto mb-2 opacity-50" />
+                  <p className="font-medium text-foreground">Nenhum débito pendente</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Nenhum profissional possui saldo devedor no momento.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {penaltyPros.map((pro) => {
+                    const proJobs = penaltyJobs.filter(
+                      (j) => j.pro_id === pro.id && !j.penalty_forgiven,
+                    )
+                    return (
+                      <div
+                        key={pro.id}
+                        className="p-4 rounded-xl border bg-amber-50/40 border-amber-200"
+                      >
+                        <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
+                          <div className="space-y-1.5 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Badge className="bg-amber-600 hover:bg-amber-700 text-white">
+                                Débito pendente
+                              </Badge>
+                              <span className="font-bold text-foreground text-base">
+                                {pro.name || 'Profissional'}
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-xs">
+                              <div className="p-2 rounded bg-background/80 border">
+                                <span className="text-muted-foreground block">Saldo devedor:</span>
+                                <span className="font-semibold text-amber-900 block">
+                                  R${' '}
+                                  {Number(pro.penalty_balance || 0)
+                                    .toFixed(2)
+                                    .replace('.', ',')}
+                                </span>
+                              </div>
+                              <div className="p-2 rounded bg-background/80 border">
+                                <span className="text-muted-foreground block">
+                                  Serviços penalizados:
+                                </span>
+                                <span className="font-medium text-foreground block">
+                                  {proJobs.length}
+                                </span>
+                              </div>
+                              <div className="p-2 rounded bg-background/80 border">
+                                <span className="text-muted-foreground block">Telefone:</span>
+                                <span className="font-medium text-foreground block">
+                                  {pro.phone || '-'}
+                                </span>
+                              </div>
+                            </div>
+
+                            {proJobs.length > 0 && (
+                              <div className="mt-2 space-y-1">
+                                {proJobs.map((pj) => (
+                                  <div
+                                    key={pj.id}
+                                    className="text-xs flex items-center justify-between gap-2 border-t border-amber-200 pt-1"
+                                  >
+                                    <span className="truncate">
+                                      {pj.expand?.service_id?.name || 'Serviço'} —{' '}
+                                      {pj.cancelled_at
+                                        ? new Date(pj.cancelled_at).toLocaleDateString('pt-BR')
+                                        : '-'}
+                                    </span>
+                                    <span className="font-semibold whitespace-nowrap">
+                                      R${' '}
+                                      {Number(pj.penalty_amount || 0)
+                                        .toFixed(2)
+                                        .replace('.', ',')}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex md:flex-col gap-2 shrink-0 justify-end">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="text-xs gap-1 border-green-300 text-green-700 hover:bg-green-50"
+                              disabled={forgivingProId === pro.id}
+                              onClick={() =>
+                                handleForgivePenalty(pro.id, pro.name || 'Profissional')
+                              }
+                            >
+                              {forgivingProId === pro.id ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <HandCoins className="h-3.5 w-3.5" />
+                              )}
+                              Perdoar débito
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </CardContent>

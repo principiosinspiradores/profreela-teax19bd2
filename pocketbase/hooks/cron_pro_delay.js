@@ -276,6 +276,9 @@ cronAdd('pro_delay_flow', '* * * * *', () => {
     } catch (_) {}
 
     // --- cancel the current job (professional_delay) -------------------
+    // The emergency surcharge (20%) the late pro owes — debited from their
+    // penalty_balance and collected from future escrow payouts.
+    const emergencyCost = Math.round(job.getFloat('price') * 0.2 * 100) / 100
     try {
       job.set('status', 'cancelled')
       job.set('cancelled_by', proId || '')
@@ -290,11 +293,28 @@ cronAdd('pro_delay_flow', '* * * * *', () => {
       } else if (ps === 'held') {
         job.set('payment_status', 'refunded')
       }
+      // Record that this job generated a penalty debit against the late pro.
+      if (emergencyCost > 0 && proId) {
+        job.set('penalty_applied', true)
+        job.set('penalty_amount', emergencyCost)
+      }
       $app.save(job)
       cancelled++
     } catch (err) {
       console.log('[pro_delay_flow] erro ao cancelar job ' + jobId + ':', err)
       continue
+    }
+
+    // Debit the emergency surcharge from the late pro's penalty_balance.
+    if (emergencyCost > 0 && proId) {
+      try {
+        const latePro = $app.findFirstRecordByData('users', 'id', proId)
+        const prev = latePro.getFloat('penalty_balance') || 0
+        latePro.set('penalty_balance', Math.round((prev + emergencyCost) * 100) / 100)
+        $app.save(latePro)
+      } catch (err) {
+        console.log('[pro_delay_flow] falha ao debitar penalty_balance do pro ' + proId + ':', err)
+      }
     }
 
     // --- create the emergency reopen job -------------------------------

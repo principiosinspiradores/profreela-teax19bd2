@@ -108,10 +108,17 @@ routerAdd(
 
     // --- cancel + emergency reopen (shared with the cron timeout path) ----
     function cancelAndReopen(reason) {
+      // The emergency surcharge (20%) that the late pro owes. Computed from the
+      // original job price: the client pays the same (client_price = price), the
+      // new pro earns 1.2x, and the 0.2x difference is debited from the late
+      // pro's penalty_balance and collected from future escrow payouts.
+      const emergencyCost = Math.round(job.getFloat('price') * 0.2 * 100) / 100
+      const originalProId = job.getString('pro_id') || ''
+
       // Cancel the current job.
       try {
         job.set('status', 'cancelled')
-        job.set('cancelled_by', job.getString('pro_id') || '')
+        job.set('cancelled_by', originalProId)
         job.set('cancelled_at', nowIso)
         job.set('cancellation_reason', reason || 'professional_delay')
         const ps = job.getString('payment_status')
@@ -120,9 +127,26 @@ routerAdd(
         } else if (ps === 'held') {
           job.set('payment_status', 'refunded')
         }
+        // Record that this job generated a penalty debit against the late pro.
+        if (emergencyCost > 0 && originalProId) {
+          job.set('penalty_applied', true)
+          job.set('penalty_amount', emergencyCost)
+        }
         $app.save(job)
       } catch (err) {
         return { ok: false, error: 'Falha ao cancelar o serviço: ' + err }
+      }
+
+      // Debit the emergency surcharge from the late pro's penalty_balance.
+      if (emergencyCost > 0 && originalProId) {
+        try {
+          const latePro = $app.findFirstRecordByData('users', 'id', originalProId)
+          const prev = latePro.getFloat('penalty_balance') || 0
+          latePro.set('penalty_balance', Math.round((prev + emergencyCost) * 100) / 100)
+          $app.save(latePro)
+        } catch (err) {
+          console.log('[pro-delay-response] falha ao debitar penalty_balance:', err)
+        }
       }
 
       // Create the emergency reopen job with the same data.

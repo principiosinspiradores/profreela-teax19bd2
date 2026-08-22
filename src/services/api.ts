@@ -211,6 +211,47 @@ export const getCancellationsByUser = (userId: string) =>
     sort: '-cancelled_at',
   })
 
+/* ------------------------------------------------------------------ */
+/* Delay-driven penalty (Entrega 2)                                    */
+/* ------------------------------------------------------------------ */
+
+/** Jobs that generated a penalty debit against a professional (delay-driven cancel+reopen). */
+export const getProPenaltyJobs = (proId: string) =>
+  pb.collection('jobs').getFullList({
+    filter: `pro_id="${proId}" && penalty_applied=true`,
+    expand: 'service_id,customer_id',
+    sort: '-created',
+  })
+
+/** All professionals with an outstanding penalty balance (admin). */
+export const getProsWithPenalty = () =>
+  pb.collection('users').getFullList({
+    filter: `role="pro" && penalty_balance > 0`,
+    sort: '-penalty_balance',
+  })
+
+/** All penalty-generating jobs across the platform (admin, for the Penalties panel). */
+export const getPenaltyJobs = () =>
+  pb.collection('jobs').getFullList({
+    filter: `penalty_applied=true`,
+    expand: 'service_id,pro_id,customer_id',
+    sort: '-created',
+  })
+
+/** Admin: forgive (zero out) a professional's outstanding penalty balance. */
+export async function forgivePenalty(proId: string): Promise<{
+  ok: boolean
+  pro_id: string
+  forgiven_amount: number
+  jobs_marked: number
+  error?: string
+}> {
+  return await pb.send('/backend/v1/admin/forgive-penalty', {
+    method: 'POST',
+    body: { proId },
+  })
+}
+
 /**
  * Fetch the Google Maps API key for client-side use (Places Autocomplete).
  * The key is exposed through an authenticated pb_hook endpoint and should be
