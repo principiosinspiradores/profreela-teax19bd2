@@ -20,6 +20,27 @@ function PublicHeader() {
   )
 }
 
+function PublicFooter() {
+  return (
+    <footer className="border-t bg-muted/30">
+      <div className="container py-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
+        <div className="flex items-center gap-2">
+          <BrandLogo size="sm" />
+          <span>© {new Date().getFullYear()} ProFreela. Todos os direitos reservados.</span>
+        </div>
+        <nav className="flex items-center gap-4">
+          <Link to="/termos" className="hover:text-foreground underline">
+            Termos de Uso
+          </Link>
+          <Link to="/privacidade" className="hover:text-foreground underline">
+            Política de Privacidade
+          </Link>
+        </nav>
+      </div>
+    </footer>
+  )
+}
+
 function AuthenticatedHeader() {
   return (
     <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-2 border-b bg-background px-4 shadow-sm">
@@ -41,6 +62,7 @@ export default function Layout() {
         <main className="flex-1 flex flex-col">
           <Outlet />
         </main>
+        <PublicFooter />
       </div>
     )
   }

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Button } from '@/components/ui/button'
 import { CheckCircle2, Star, ShieldCheck } from 'lucide-react'
 import { AuthDialog } from '@/components/auth/AuthDialog'
@@ -161,6 +162,21 @@ export default function Index() {
             </Button>
           </div>
         </div>
+      </section>
+
+      {/* Legal links */}
+      <section className="container pb-12 text-center">
+        <p className="text-xs text-muted-foreground">
+          Ao continuar, você concorda com nossos{' '}
+          <Link to="/termos" className="text-foreground underline hover:text-primary">
+            Termos de Uso
+          </Link>{' '}
+          e{' '}
+          <Link to="/privacidade" className="text-foreground underline hover:text-primary">
+            Política de Privacidade
+          </Link>
+          .
+        </p>
       </section>
     </>
   )

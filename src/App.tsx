@@ -25,6 +25,8 @@ import AdminUsers from './pages/admin/Users'
 import AdminPricing from './pages/admin/Pricing'
 import AdminReviews from './pages/admin/Reviews'
 import Chat from './pages/Chat'
+import TermsOfService from './pages/legal/TermsOfService'
+import PrivacyPolicy from './pages/legal/PrivacyPolicy'
 
 // Route guard: only allows authenticated users with one of `allowedRoles`.
 // Visitors (guests) are sent to the landing page; authenticated users with a
@@ -174,6 +176,11 @@ const AppRoutes = () => (
         }
       />
     </Route>
+
+    {/* Public legal pages — no auth required, self-contained layout */}
+    <Route path="/termos" element={<TermsOfService />} />
+    <Route path="/privacidade" element={<PrivacyPolicy />} />
+
     <Route path="*" element={<NotFound />} />
   </Routes>
 )
