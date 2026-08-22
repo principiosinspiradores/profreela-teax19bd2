@@ -10,6 +10,7 @@ import {
   SidebarMenuItem,
   SidebarHeader,
   SidebarFooter,
+  useSidebar,
 } from '@/components/ui/sidebar'
 import { useAuth } from '@/hooks/use-auth'
 import { Button } from '@/components/ui/button'
@@ -18,6 +19,7 @@ import { BrandLogo } from './BrandLogo'
 
 export function AppSidebar() {
   const { role, signOut, user } = useAuth()
+  const { setOpenMobile } = useSidebar()
   const location = useLocation()
 
   const getMenu = () => {
@@ -72,7 +74,11 @@ export function AppSidebar() {
                 return (
                   <SidebarMenuItem key={item.title}>
                     <SidebarMenuButton asChild isActive={isActive}>
-                      <Link to={item.url} className="flex items-center gap-2">
+                      <Link
+                        to={item.url}
+                        className="flex items-center gap-2"
+                        onClick={() => setOpenMobile(false)}
+                      >
                         <item.icon className="h-4 w-4" />
                         <span>{item.title}</span>
                       </Link>

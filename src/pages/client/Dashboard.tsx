@@ -271,11 +271,11 @@ export default function ClientDashboard() {
             {activeJobs.map((job) => (
               <Card key={job.id} className="hover:shadow-md transition-shadow">
                 <CardContent className="p-0 flex flex-col md:flex-row">
-                  <div className="md:w-48 h-32 bg-muted relative flex items-center justify-center">
+                  <div className="md:w-48 h-48 md:h-32 bg-muted relative flex items-center justify-center rounded-t-lg md:rounded-l-lg md:rounded-tr-none">
                     {job.expand?.pro_id ? (
                       <img
                         src={getAvatarUrl(job.expand.pro_id, 200)}
-                        className="w-full h-full object-cover"
+                        className="w-full h-full object-contain md:object-cover"
                         alt={job.expand.pro_id.name || 'Profissional'}
                       />
                     ) : (
