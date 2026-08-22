@@ -159,7 +159,7 @@ export default function ClientDashboard() {
                 <h3 className="text-3xl font-bold text-primary">{pros.length}</h3>
               </div>
               <div className="bg-white p-3 rounded-full shadow-sm">
-                <img src="/logo-icon.png" alt="ProFreela" className="h-8 w-8 object-contain" />
+                <img src="/logo-icon.png" alt="ProFreela" className="h-10 w-10 object-contain" />
               </div>
             </div>
           </CardContent>
