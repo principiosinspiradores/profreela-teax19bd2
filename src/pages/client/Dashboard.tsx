@@ -33,6 +33,7 @@ import { getAvatarUrl } from '@/lib/avatar'
 import { BrandLogo } from '@/components/BrandLogo'
 import { PaymentStatusBadge } from '@/components/PaymentStatusBadge'
 import { DisputeDialog } from '@/components/DisputeDialog'
+import { jobStatusLabel } from '@/lib/jobStatus'
 import { type PaymentState } from '@/services/checkout'
 import { useDashboardStats } from '@/hooks/use-dashboard-stats'
 import {
@@ -293,7 +294,7 @@ export default function ClientDashboard() {
                       <BrandLogo size="xl" />
                     )}
                     <Badge className="absolute top-2 right-2 bg-secondary capitalize">
-                      {job.status}
+                      {jobStatusLabel(job.status)}
                     </Badge>
                   </div>
                   <div className="p-6 flex-1 flex flex-col justify-center">
@@ -315,7 +316,7 @@ export default function ClientDashboard() {
                     </div>
                     {job.payment_status && (
                       <div className="mt-2">
-                        <PaymentStatusBadge state={job as PaymentState} />
+                        <PaymentStatusBadge state={job as PaymentState} role="client" />
                       </div>
                     )}
                     {job.expand?.pro_id || job.pro_id ? (

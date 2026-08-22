@@ -64,6 +64,8 @@ import {
   type AntiDisintermediationAlert,
   type ChatDisintermediationAlert,
 } from '@/services/api'
+import { releasePayment, cancelAuthorization } from '@/services/checkout'
+import { jobStatusLabel } from '@/lib/jobStatus'
 import { formatPhoneNumber } from '@/lib/phone'
 import { getAvatarUrl } from '@/lib/avatar'
 import { useToast } from '@/hooks/use-toast'
@@ -102,6 +104,7 @@ export default function AdminDashboard() {
   const [penaltyJobs, setPenaltyJobs] = useState<any[]>([])
   const [loadingPenalties, setLoadingPenalties] = useState(false)
   const [forgivingProId, setForgivingProId] = useState<string | null>(null)
+  const [disputeActionJobId, setDisputeActionJobId] = useState<string | null>(null)
 
   // Real professional shown in the "Moderação de Profissionais" card. Falls
   // back to null when there is no pro in the base, in which case the
@@ -167,6 +170,46 @@ export default function AdminDashboard() {
   }
 
   // Entrega 2 — forgive (zero out) a pro's outstanding penalty balance.
+  const handleReleasePayment = async (jobId: string) => {
+    setDisputeActionJobId(jobId)
+    try {
+      await releasePayment(jobId)
+      toast({
+        title: 'Pagamento liberado',
+        description: 'O pagamento foi liberado com sucesso.',
+      })
+      await loadAllJobs()
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao liberar pagamento',
+        description: err?.message || 'Não foi possível liberar o pagamento.',
+        variant: 'destructive',
+      })
+    } finally {
+      setDisputeActionJobId(null)
+    }
+  }
+
+  const handleCancelAuthorization = async (jobId: string) => {
+    setDisputeActionJobId(jobId)
+    try {
+      await cancelAuthorization(jobId)
+      toast({
+        title: 'Estorno realizado',
+        description: 'A autorização de pagamento foi estornada/cancelada com sucesso.',
+      })
+      await loadAllJobs()
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao estornar pagamento',
+        description: err?.message || 'Não foi possível estornar a autorização.',
+        variant: 'destructive',
+      })
+    } finally {
+      setDisputeActionJobId(null)
+    }
+  }
+
   const handleForgivePenalty = async (proId: string, proName: string) => {
     setForgivingProId(proId)
     try {
@@ -316,6 +359,15 @@ export default function AdminDashboard() {
             {penaltyPros.length > 0 && (
               <Badge variant="destructive" className="ml-2 px-1.5 py-0 text-[10px] h-4">
                 {penaltyPros.length}
+              </Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="disputes" className="relative flex items-center gap-1.5">
+            <AlertTriangle className="h-4 w-4" />
+            Disputas
+            {jobs.filter((j) => j.payment_status === 'disputed').length > 0 && (
+              <Badge variant="destructive" className="ml-1.5 px-1.5 py-0 text-[10px] h-4">
+                {jobs.filter((j) => j.payment_status === 'disputed').length}
               </Badge>
             )}
           </TabsTrigger>
@@ -920,7 +972,7 @@ export default function AdminDashboard() {
                             </TableCell>
                             <TableCell>
                               <Badge variant="outline" className="capitalize text-xs">
-                                {job.status}
+                                {jobStatusLabel(job.status)}
                               </Badge>
                             </TableCell>
                             <TableCell>
@@ -1115,6 +1167,138 @@ export default function AdminDashboard() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* Disputes Tab */}
+        <TabsContent value="disputes" className="space-y-6">
+          <Card>
+            <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-xl text-red-600">
+                  <AlertTriangle className="h-5 w-5 text-red-600" />
+                  Gestão de Disputas
+                </CardTitle>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Serviços com pagamentos contestados pelo cliente aguardando moderação. Libere o
+                  pagamento para o profissional ou estorne o valor para o cliente.
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={loadAllJobs}
+                disabled={loadingJobs}
+                className="gap-2 shrink-0"
+              >
+                <RefreshCw className={`h-4 w-4 ${loadingJobs ? 'animate-spin' : ''}`} />
+                Atualizar Lista
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {loadingJobs ? (
+                <div className="flex items-center justify-center py-12 text-muted-foreground">
+                  <Loader2 className="h-6 w-6 animate-spin mr-2" /> Carregando disputas...
+                </div>
+              ) : jobs.filter((j) => j.payment_status === 'disputed').length === 0 ? (
+                <div className="text-center py-12 border border-dashed rounded-lg bg-muted/20">
+                  <AlertTriangle className="h-10 w-10 text-muted-foreground mx-auto mb-2 opacity-50" />
+                  <p className="font-medium text-foreground">Nenhuma disputa ativa</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Todos os pagamentos estão regularizados e sem contestações abertas.
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded-md border overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Job ID</TableHead>
+                        <TableHead>Serviço</TableHead>
+                        <TableHead>Cliente</TableHead>
+                        <TableHead>Profissional</TableHead>
+                        <TableHead>Valor</TableHead>
+                        <TableHead>Motivo</TableHead>
+                        <TableHead>Data</TableHead>
+                        <TableHead className="text-right">Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {jobs
+                        .filter((j) => j.payment_status === 'disputed')
+                        .map((job) => {
+                          const proUser = job.expand?.pro_id
+                          const clientUser = job.expand?.customer_id
+                          const isProcessing = disputeActionJobId === job.id
+
+                          return (
+                            <TableRow key={job.id}>
+                              <TableCell className="font-mono text-xs">
+                                #{job.id.slice(0, 6)}
+                              </TableCell>
+                              <TableCell className="font-medium">
+                                {job.expand?.service_id?.name || 'Serviço'}
+                              </TableCell>
+                              <TableCell>{clientUser?.name || '-'}</TableCell>
+                              <TableCell>{proUser?.name || '-'}</TableCell>
+                              <TableCell className="font-medium whitespace-nowrap">
+                                R${' '}
+                                {Number(job.price || 0)
+                                  .toFixed(2)
+                                  .replace('.', ',')}
+                              </TableCell>
+                              <TableCell className="max-w-xs">
+                                <span className="text-xs text-red-950 block break-words">
+                                  {job.dispute_reason || 'Motivo não especificado'}
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                                <span className="flex items-center gap-1">
+                                  <Calendar className="h-3 w-3" />
+                                  {job.payment_disputed_at
+                                    ? new Date(job.payment_disputed_at).toLocaleDateString('pt-BR')
+                                    : new Date(job.created).toLocaleDateString('pt-BR')}
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-right">
+                                <div className="flex items-center justify-end gap-2">
+                                  <Button
+                                    size="sm"
+                                    className="bg-green-600 hover:bg-green-700 text-white text-xs gap-1"
+                                    disabled={isProcessing}
+                                    onClick={() => handleReleasePayment(job.id)}
+                                  >
+                                    {isProcessing ? (
+                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    ) : (
+                                      <Check className="h-3.5 w-3.5" />
+                                    )}
+                                    Liberar Pagamento
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    className="text-xs gap-1"
+                                    disabled={isProcessing}
+                                    onClick={() => handleCancelAuthorization(job.id)}
+                                  >
+                                    {isProcessing ? (
+                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    ) : (
+                                      <X className="h-3.5 w-3.5" />
+                                    )}
+                                    Estornar
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
 
       {/* Modal for viewing details of jobs in an alert */}
@@ -1146,7 +1330,7 @@ export default function AdminDashboard() {
                       <span className="font-mono text-xs font-semibold">#{j.id.slice(0, 6)}</span>
                       <span className="font-medium">{j.expand?.service_id?.name || 'Serviço'}</span>
                       <Badge variant="outline" className="text-[10px] capitalize">
-                        {j.status}
+                        {jobStatusLabel(j.status)}
                       </Badge>
                     </div>
                     <div className="text-xs text-muted-foreground flex items-center gap-3">

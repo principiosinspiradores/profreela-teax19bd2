@@ -24,7 +24,13 @@ import {
  * Liberado, Em disputa, Cancelado, Reembolsado) and, when in the guarantee
  * window, a live regressive timer of the days/hours remaining until capture.
  */
-export function PaymentStatusBadge({ state }: { state: PaymentState | null | undefined }) {
+export function PaymentStatusBadge({
+  state,
+  role,
+}: {
+  state: PaymentState | null | undefined
+  role?: string
+}) {
   // Re-render every minute so the countdown stays live.
   const [, setTick] = useState(0)
   useEffect(() => {
@@ -70,7 +76,7 @@ export function PaymentStatusBadge({ state }: { state: PaymentState | null | und
           {formatGuaranteeCountdown(remaining)} restantes
         </span>
       )}
-      {status === 'held' && remaining <= 0 && (
+      {status === 'held' && remaining <= 0 && (role === undefined || role === 'pro') && (
         <span className="text-xs text-green-700 flex items-center gap-1">
           <CheckCircle2 className="h-3 w-3" />
           Pronto para captura
