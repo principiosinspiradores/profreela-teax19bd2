@@ -3,14 +3,15 @@ import { Link } from 'react-router-dom'
 import { ChevronRight, ShieldCheck, Home } from 'lucide-react'
 import { BrandLogo } from '@/components/BrandLogo'
 
-// Dados cadastrais placeholder — o admin pode editar posteriormente.
+// Dados cadastrais da empresa operadora da plataforma.
 const COMPANY = {
-  legalName: 'ProFreela Tecnologia Ltda.',
-  cnpj: '00.000.000/0001-00',
-  address: 'Av. Paulista, 1000, Bela Vista — São Paulo/SP, CEP 01310-100',
-  dpoName: 'Departamento de Proteção de Dados (DPO)',
-  dpoEmail: 'dpo@profreela.com.br',
-  privacyEmail: 'privacidade@profreela.com.br',
+  legalName: 'Housekeeping Brasil Consultoria e Facilities Ltda.',
+  cnpj: '65.342.542/0001-98',
+  address:
+    'Av. Doutor Julio Soares de Arruda, 480 — Parque São Quirino, Campinas/SP, CEP 13088-300',
+  dpoName: 'Encarregado de Proteção de Dados (DPO)',
+  dpoEmail: 'profreela@profreela.com.br',
+  privacyEmail: 'profreela@profreela.com.br',
 }
 
 const SECTIONS = [
@@ -31,10 +32,6 @@ const SECTIONS = [
             {COMPANY.dpoEmail}
           </a>
           .
-        </p>
-        <p className="text-sm text-muted-foreground italic">
-          Observação: os dados cadastrais acima são placeholders e serão substituídos pelos dados
-          oficiais antes da publicação.
         </p>
       </div>
     ),
