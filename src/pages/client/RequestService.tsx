@@ -9,6 +9,7 @@ import {
   Users,
   Minus,
   Plus,
+  X,
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -64,6 +65,9 @@ export default function RequestService() {
   // Forces AddressAutocomplete to remount when a saved location is picked, so
   // the new `defaultValue` (derived from `value`) is applied to a fresh input.
   const [selectedSavedLocationId, setSelectedSavedLocationId] = useState<string | null>(null)
+  // Toggles the visibility of the saved-address chips. Resets to true on page
+  // reload (in-memory state only).
+  const [showSavedChips, setShowSavedChips] = useState(true)
   // Payment-at-request (escrow): the client pays BEFORE the job is created.
   // `checkoutOpen` toggles the payment modal; `pendingPayload` holds the
   // validated job data so it can be created only after a confirmed payment.
@@ -288,8 +292,16 @@ export default function RequestService() {
                     apiKey={mapsApiKey}
                     required
                   />
-                  {savedLocations.length > 0 && (
-                    <div className="flex flex-wrap gap-2 pt-1">
+                  {savedLocations.length > 0 && showSavedChips && (
+                    <div className="relative flex flex-wrap gap-2 pt-1 pr-8">
+                      <button
+                        type="button"
+                        onClick={() => setShowSavedChips(false)}
+                        aria-label="Fechar endereços salvos"
+                        className="absolute -top-1 right-0 inline-flex items-center justify-center h-6 w-6 rounded-full hover:bg-muted text-muted-foreground transition-colors"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
                       {savedLocations.map((loc) => (
                         <button
                           key={loc.id}
