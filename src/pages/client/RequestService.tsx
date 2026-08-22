@@ -487,14 +487,6 @@ export default function RequestService() {
                   </span>
                   <span>R$ {effectiveHourly.toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Mão de obra ({safeHours}h)</span>
-                  <span>R$ {labourCost.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Deslocamento ({distanceKm}km)</span>
-                  <span>R$ {distanceFee.toFixed(2)}</span>
-                </div>
                 {isEmergency && (
                   <div className="flex justify-between text-sm text-accent font-medium">
                     <span className="flex items-center gap-1">
