@@ -3,7 +3,6 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
-import { Separator } from '@/components/ui/separator'
 import { Badge } from '@/components/ui/badge'
 import { Loader2, CreditCard, ShieldCheck, Lock, Clock } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
@@ -151,26 +150,13 @@ export function Checkout({
           </div>
         </div>
 
-        {/* Split summary */}
+        {/* Total */}
         {split && (
-          <div className="rounded-lg border bg-muted/30 p-4 space-y-2 text-sm">
+          <div className="rounded-lg border bg-muted/30 p-4 text-sm">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Total a pagar</span>
               <span className="font-bold">
                 R$ {split.total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-              </span>
-            </div>
-            <div className="flex justify-between text-muted-foreground">
-              <span>Taxa da plataforma ({split.feePercent}%)</span>
-              <span>
-                - R$ {split.platformFee.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-              </span>
-            </div>
-            <Separator />
-            <div className="flex justify-between font-medium">
-              <span>Repassa ao profissional</span>
-              <span className="text-green-600">
-                R$ {split.proAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
               </span>
             </div>
             {settings?.module_dynamic_pricing_enabled && (
