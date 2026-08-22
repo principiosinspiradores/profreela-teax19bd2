@@ -46,7 +46,7 @@ export function NotificationBell() {
   const [loading, setLoading] = useState(false)
 
   // Unread chat messages — live (refreshes on any `messages` collection event).
-  const { total: unreadMessages, jobs: unreadJobs } = useUnreadMessages()
+  const { total: unreadMessages, jobs: unreadJobs, counts } = useUnreadMessages()
 
   const load = useCallback(async () => {
     if (!user) return
@@ -88,8 +88,9 @@ export function NotificationBell() {
   // Open the chat for the first unread job (the badge is a shortcut).
   const handleChatClick = () => {
     setOpen(false)
-    if (unreadJobs && unreadJobs.length > 0) {
-      navigate(`/chat/${unreadJobs[0].id}`)
+    const jobId = unreadJobs?.[0]?.id || Object.keys(counts || {})[0]
+    if (jobId) {
+      navigate(`/chat/${jobId}`)
     } else {
       navigate(role === 'pro' ? '/pro' : '/client')
     }
