@@ -28,10 +28,12 @@ import Chat from './pages/Chat'
 import TermsOfService from './pages/legal/TermsOfService'
 import PrivacyPolicy from './pages/legal/PrivacyPolicy'
 
-// Route guard: only allows authenticated users with one of `allowedRoles`.
-// Visitors (guests) are sent to the landing page; authenticated users with a
-// different role are redirected to their own dashboard. This enforces role-based
-// access to /admin, /pro and /client at the routing layer.
+/**
+ * Route guard: only allows authenticated users with one of `allowedRoles`.
+ * Visitors (guests) are sent to the landing page; authenticated users with a
+ * different role are redirected to their own dashboard. This enforces role-based
+ * access to /admin, /pro and /client at the routing layer.
+ */
 function ProtectedRoute({
   allowedRoles,
   children,

@@ -125,6 +125,46 @@ export default function ActiveJob() {
     loadJob()
   }, [loadJob])
 
+  // Polling: recarrega o job a cada 10s para detectar mudanças do backend (cron, cancelamento, disputa)
+  useEffect(() => {
+    if (!jobId || step === 'finished') return
+    const interval = setInterval(async () => {
+      try {
+        const fresh = await getJob(jobId)
+        if (!fresh) return
+        if (fresh.status === 'cancelled' || fresh.status === 'pending') {
+          if (job?.status === 'accepted' || job?.status === 'in_progress') {
+            toast({
+              title: 'Serviço cancelado',
+              description: 'Este serviço foi cancelado ou reaberto como emergência pelo sistema.',
+              variant: 'destructive',
+            })
+            navigate('/pro')
+            return
+          }
+        }
+        setJob((prev: any) => ({ ...prev, ...fresh }))
+        setStep((currentStep) => {
+          if (
+            fresh.status === 'in_progress' &&
+            currentStep !== 'working' &&
+            currentStep !== 'end_photo' &&
+            currentStep !== 'finished'
+          ) {
+            return 'working'
+          }
+          if (fresh.status === 'completed' && currentStep !== 'finished') {
+            return 'finished'
+          }
+          return currentStep
+        })
+      } catch {
+        /* intentionally ignored */
+      }
+    }, 10000)
+    return () => clearInterval(interval)
+  }, [jobId, step, job?.status, toast, navigate])
+
   // --- geocode the job address once ----------------------------------------
   useEffect(() => {
     if (!job?.address) return
@@ -339,11 +379,15 @@ export default function ActiveJob() {
     // time, so the pro can't start hours before or after the slot.
     if (job?.scheduled_at) {
       const schedMs = new Date(job.scheduled_at).getTime()
-      const driftMs = Math.abs(Date.now() - schedMs)
-      if (!isNaN(schedMs) && driftMs > SCHEDULED_TOLERANCE_MS) {
+      const diffMs = Date.now() - schedMs
+      const tooEarly = !isNaN(schedMs) && diffMs < -30 * 60 * 1000
+      const tooLate = !isNaN(schedMs) && diffMs > SCHEDULED_TOLERANCE_MS
+      if (tooEarly || tooLate) {
         toast({
           title: 'Fora do horário agendado',
-          description: `O serviço foi agendado para ${formatScheduledSlot(job.scheduled_at, job.hours)}. Você só pode iniciá-lo com até 15 minutos de tolerância.`,
+          description: tooEarly
+            ? `Você está muito adiantado. O serviço está agendado para ${formatScheduledSlot(job.scheduled_at, job.hours)}. Aguarde até 30 minutos antes do horário.`
+            : `Você está atrasado. O serviço foi agendado para ${formatScheduledSlot(job.scheduled_at, job.hours)}. A tolerância máxima é de 15 minutos.`,
           variant: 'destructive',
         })
         return
