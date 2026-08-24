@@ -64,7 +64,7 @@ import {
   type AntiDisintermediationAlert,
   type ChatDisintermediationAlert,
 } from '@/services/api'
-import { releasePayment, cancelAuthorization } from '@/services/checkout'
+import { releasePayment, cancelAuthorization, captureSplitPayment } from '@/services/checkout'
 import { jobStatusLabel } from '@/lib/jobStatus'
 import { formatPhoneNumber } from '@/lib/phone'
 import { getAvatarUrl } from '@/lib/avatar'
@@ -173,7 +173,12 @@ export default function AdminDashboard() {
   const handleReleasePayment = async (jobId: string) => {
     setDisputeActionJobId(jobId)
     try {
-      await releasePayment(jobId)
+      const job = jobs.find((j) => j.id === jobId)
+      if (job?.payment_status === 'disputed') {
+        await captureSplitPayment(jobId, true) // force = true ignora status
+      } else {
+        await releasePayment(jobId)
+      }
       toast({
         title: 'Pagamento liberado',
         description: 'O pagamento foi liberado com sucesso.',

@@ -309,6 +309,11 @@ routerAdd(
       if (paymentStatus === 'authorized' && penaltyStatus !== 'charged') {
         job.set('payment_status', 'cancelled')
       }
+      // Cliente cancelando com pagamento já capturado (held):
+      // marca refunded; se há multa ela já está em penalty_amount
+      if (paymentStatus === 'held') {
+        job.set('payment_status', 'refunded')
+      }
     }
     $app.save(job)
 
