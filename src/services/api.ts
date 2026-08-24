@@ -41,6 +41,7 @@ export const deleteService = async (id: string) => {
 }
 export const getJobs = () =>
   pb.collection('jobs').getFullList({ expand: 'service_id,pro_id,customer_id', sort: '-created' })
+export const loadAllJobs = getJobs
 export const getProJobs = (proId: string) =>
   pb.collection('jobs').getFullList({
     filter: `pro_id="${proId}" || status="pending"`,

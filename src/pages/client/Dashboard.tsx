@@ -26,6 +26,7 @@ import {
 import { Label } from '@/components/ui/label'
 import { Loader2 } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
+import pb from '@/lib/pocketbase/client'
 import { getClientJobs, getBanners, getNearbyPros } from '@/services/api'
 import { useRealtime } from '@/hooks/use-realtime'
 import { useToast } from '@/hooks/use-toast'
@@ -94,6 +95,36 @@ export default function ClientDashboard() {
     loadData()
   }, [user])
   useRealtime('jobs', loadData)
+
+  useEffect(() => {
+    let unsubscribe: (() => void) | undefined
+
+    // Inscreve em mudanças nos jobs em tempo real
+    if (pb.authStore.isValid) {
+      const fetchLatest = async () => {
+        const { loadAllJobs } = await import('@/services/api')
+        if (typeof setJobs === 'function') {
+          loadAllJobs()
+            .then(setJobs)
+            .catch(() => {})
+        }
+      }
+
+      pb.collection('jobs')
+        .subscribe('*', (_e) => {
+          // Recarrega a lista sempre que qualquer job mudar
+          fetchLatest()
+        })
+        .then((unsub) => {
+          unsubscribe = unsub
+        })
+        .catch(() => {})
+    }
+
+    return () => {
+      if (unsubscribe) unsubscribe()
+    }
+  }, [])
 
   const activeJobs = jobs.filter((j) => ['pending', 'accepted', 'in_progress'].includes(j.status))
   const completedJobs = jobs.filter((j) => j.status === 'completed')
