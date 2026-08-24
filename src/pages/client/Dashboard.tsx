@@ -139,7 +139,7 @@ export default function ClientDashboard() {
     <div className="space-y-8 max-w-5xl mx-auto w-full">
       <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Portal da Empresa</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Painel do Cliente</h1>
           <p className="text-muted-foreground">Gerencie suas solicitações e profissionais.</p>
         </div>
         <Button asChild size="lg" className="h-12 shadow-md">
@@ -159,7 +159,7 @@ export default function ClientDashboard() {
                 <h3 className="text-3xl font-bold text-primary">{pros.length}</h3>
               </div>
               <div className="bg-white p-3 rounded-full shadow-sm">
-                <img src="/logo-icon.png" alt="ProFreela" className="h-10 w-10 object-contain" />
+                <Shield className="h-6 w-6 text-primary" />
               </div>
             </div>
           </CardContent>
