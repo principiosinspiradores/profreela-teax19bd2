@@ -77,7 +77,30 @@ export default function ActiveJob() {
   const [usingFallback, setUsingFallback] = useState(false)
   const [distance, setDistance] = useState<DistanceResult | null>(null)
   const [embedUrl, setEmbedUrl] = useState<string | null>(null)
-  const [step, setStep] = useState<Step>('transit')
+  const [step, setStepState] = useState<Step>(() => {
+    if (!jobId) return 'transit'
+    const saved = localStorage.getItem('activeJobStep_' + jobId)
+    return saved === 'arrived' ||
+      saved === 'id_photo' ||
+      saved === 'start_photo' ||
+      saved === 'working' ||
+      saved === 'end_photo'
+      ? (saved as Step)
+      : 'transit'
+  })
+
+  const setStep = useCallback(
+    (action: Step | ((prev: Step) => Step)) => {
+      setStepState((prev) => {
+        const next = typeof action === 'function' ? action(prev) : action
+        if (jobId) {
+          localStorage.setItem('activeJobStep_' + jobId, next)
+        }
+        return next
+      })
+    },
+    [jobId],
+  )
   const [finishing, setFinishing] = useState(false)
   const [starting, setStarting] = useState(false)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
@@ -134,6 +157,9 @@ export default function ActiveJob() {
         if (!fresh) return
         if (fresh.status === 'cancelled' || fresh.status === 'pending') {
           if (job?.status === 'accepted' || job?.status === 'in_progress') {
+            if (jobId) {
+              localStorage.removeItem('activeJobStep_' + jobId)
+            }
             toast({
               title: 'Serviço cancelado',
               description: 'Este serviço foi cancelado ou reaberto como emergência pelo sistema.',
@@ -377,7 +403,7 @@ export default function ActiveJob() {
     if (!jobId || starting) return
     // Scheduled-time gate: only allow starting within ±15 min of the agreed
     // time, so the pro can't start hours before or after the slot.
-    if (job?.scheduled_at) {
+    if (job?.scheduled_at && job?.type !== 'emergency') {
       const schedMs = new Date(job.scheduled_at).getTime()
       const diffMs = Date.now() - schedMs
       const tooEarly = !isNaN(schedMs) && diffMs < -30 * 60 * 1000
@@ -454,6 +480,9 @@ export default function ActiveJob() {
     setFinishing(true)
     try {
       await finishJob(jobId, coords || undefined)
+      if (jobId) {
+        localStorage.removeItem('activeJobStep_' + jobId)
+      }
       toast({
         title: 'Serviço finalizado',
         description: 'Iniciado o período de garantia de 7 dias. O pagamento será liberado após.',

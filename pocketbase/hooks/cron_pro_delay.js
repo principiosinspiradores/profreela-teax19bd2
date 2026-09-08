@@ -115,7 +115,13 @@ cronAdd('pro_delay_flow', '* * * * *', () => {
     if (!scheduledAt) continue
     const schedMs = new Date(scheduledAt).getTime()
     if (isNaN(schedMs)) continue
-    const elapsedMs = nowMs - schedMs // positive when past scheduled_start
+    let refMs = schedMs
+    const acceptedStr = job.getString('accepted_at')
+    if (acceptedStr) {
+      const accMs = new Date(acceptedStr).getTime()
+      if (!isNaN(accMs) && accMs > refMs) refMs = accMs
+    }
+    const elapsedMs = nowMs - refMs // positive when past reference start
 
     // 10 min after scheduled_start → "5 min to start"
     if (elapsedMs >= WARN_5MIN_BEFORE_MS && elapsedMs < LATE_MS) {
@@ -213,6 +219,16 @@ cronAdd('pro_delay_flow', '* * * * *', () => {
     if (job.getBool('delay_notification_sent')) continue
     // Skip jobs whose client already answered
     if (job.getString('client_delay_response')) continue
+
+    const schedMs = new Date(job.getString('scheduled_at')).getTime()
+    let refMs = schedMs
+    const acceptedStr = job.getString('accepted_at')
+    if (acceptedStr) {
+      const accMs = new Date(acceptedStr).getTime()
+      if (!isNaN(accMs) && accMs > refMs) refMs = accMs
+    }
+    // Re-verify that the job has exceeded the 15-min tolerance relative to refMs
+    if (refMs > nowMs - LATE_MS) continue
 
     // Notify the client.
     const proName = proNameFor(job)
