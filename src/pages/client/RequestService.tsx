@@ -165,19 +165,43 @@ export default function RequestService() {
         lng = geo.lng
       }
 
+      // Trava de antecedência: jobs agendados exigem no mínimo 12h entre
+      // o pedido e o início. Menos que isso vira emergência (+20%).
+      const MIN_ADVANCE_HOURS = 12
+      let effectiveType = type
+      let effectiveScheduledAt = scheduledAt
+      let effectivePrice = unitPrice
+
+      if (type === 'scheduled' && scheduledAt) {
+        const selectedMs = new Date(scheduledAt).getTime()
+        const minAdvanceMs = Date.now() + MIN_ADVANCE_HOURS * 60 * 60 * 1000
+        if (!isNaN(selectedMs) && selectedMs < minAdvanceMs) {
+          effectiveType = 'emergency'
+          effectiveScheduledAt = new Date().toISOString()
+          effectivePrice = (labourCost + distanceFee) * 1.2
+          setType('emergency')
+          toast({
+            title: 'Convertido para emergência',
+            description:
+              'Serviços agendados precisam de pelo menos 12h de antecedência. ' +
+              'Sua solicitação será tratada como emergência (+20%).',
+          })
+        }
+      }
+
       // Stash the validated payload; the job is created only after the payment
       // is confirmed in the checkout modal (onPaid → createJobsAfterPayment).
       setPendingPayload({
         customer_id: user.id,
         service_id: selectedService,
         status: 'pending',
-        price: unitPrice,
+        price: effectivePrice,
         hours: safeHours,
-        type,
+        type: effectiveType,
         address: enderecoCompleto,
         latitude: lat,
         longitude: lng,
-        scheduled_at: isEmergency ? new Date().toISOString() : scheduledAt,
+        scheduled_at: effectiveScheduledAt,
       })
       setCheckoutOpen(true)
     } catch (err) {
@@ -469,6 +493,13 @@ export default function RequestService() {
                       Selecione o dia e o horário de início. O serviço será agendado no fuso horário
                       de Brasília (UTC-3).
                     </p>
+                    {scheduledAt &&
+                      new Date(scheduledAt).getTime() < Date.now() + 12 * 60 * 60 * 1000 && (
+                        <p className="text-xs text-amber-600 font-medium flex items-center gap-1">
+                          <Zap className="h-3 w-3" />
+                          Menos de 12h de antecedência — será convertido para emergência (+20%)
+                        </p>
+                      )}
                   </div>
                 )}
               </CardContent>
