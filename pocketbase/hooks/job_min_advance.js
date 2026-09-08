@@ -22,5 +22,10 @@ onRecordCreate((e) => {
     }
   }
 
+  // Emergência sem horário definido (fluxo antigo ou API direta): grava agora.
+  if (job.getString('type') === 'emergency' && !job.getString('scheduled_at')) {
+    job.set('scheduled_at', new Date().toISOString())
+  }
+
   e.next()
 }, 'jobs')

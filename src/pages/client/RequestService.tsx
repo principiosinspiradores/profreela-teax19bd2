@@ -189,6 +189,13 @@ export default function RequestService() {
         }
       }
 
+      // Emergência é início imediato: grava scheduled_at = agora, para que o
+      // hook de conflito de agenda (accept_job.js) tenha a janela de overlap
+      // e o cron de atraso tenha referência.
+      if (effectiveType === 'emergency' && !effectiveScheduledAt) {
+        effectiveScheduledAt = new Date().toISOString()
+      }
+
       // Stash the validated payload; the job is created only after the payment
       // is confirmed in the checkout modal (onPaid → createJobsAfterPayment).
       setPendingPayload({
