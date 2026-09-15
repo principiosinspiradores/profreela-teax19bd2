@@ -93,7 +93,8 @@ export default function AdminDocuments() {
     load()
   }, [load])
 
-  const docUserName = (doc: DocumentRecord): string => {
+  const docUserName = (doc?: DocumentRecord | null): string => {
+    if (!doc) return 'Usuário não encontrado'
     const u = doc.expand?.user_id
     return u?.name || u?.email || 'Profissional'
   }
@@ -103,7 +104,7 @@ export default function AdminDocuments() {
     try {
       await approveDocument(doc.id)
       // First approval activates the pro's account ("verified" status).
-      const u = doc.expand?.user_id
+      const u = doc?.expand?.user_id
       if (u && u.status === 'pending') {
         try {
           await updateUser(u.id, { status: 'active' })
@@ -153,8 +154,9 @@ export default function AdminDocuments() {
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return docs.filter((d) => {
-      const u = d.expand?.user_id
-      const haystack = `${u?.name || ''} ${u?.email || ''} ${docTypeLabel(d.type)}`.toLowerCase()
+      const u = d?.expand?.user_id
+      const haystack =
+        `${u?.name || ''} ${u?.email || ''} ${docTypeLabel(d?.type || '')}`.toLowerCase()
       return !q || haystack.includes(q)
     })
   }, [docs, search])
@@ -290,7 +292,7 @@ export default function AdminDocuments() {
                 </TableHeader>
                 <TableBody>
                   {filtered.map((doc) => {
-                    const u = doc.expand?.user_id
+                    const u = doc?.expand?.user_id
                     const meta = STATUS_META[(doc.status as StatusFilter) || 'pending']
                     return (
                       <TableRow key={doc.id}>
@@ -371,8 +373,8 @@ export default function AdminDocuments() {
           <DialogHeader>
             <DialogTitle>Rejeitar documento</DialogTitle>
             <DialogDescription>
-              Documento de <strong>{docUserName(rejectDoc as DocumentRecord)}</strong>. Explique o
-              motivo — a orientação aparece para o profissional ao reenviar.
+              Documento de <strong>{docUserName(rejectDoc)}</strong>. Explique o motivo — a
+              orientação aparece para o profissional ao reenviar.
             </DialogDescription>
           </DialogHeader>
           <Textarea
