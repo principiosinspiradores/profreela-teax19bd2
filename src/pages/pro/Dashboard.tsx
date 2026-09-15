@@ -99,105 +99,134 @@ export default function ProDashboard() {
 
   const loadData = async () => {
     if (!user) return
-    getSettings()
-      .then(setSettings)
-      .catch(() => {})
-    getCancellationPolicy()
-      .then(setPolicy)
-      .catch(() => {})
-    const docs = await getUserDocuments(user.id)
-    setDocuments(docs)
 
-    // Refresh the current pro's record so `blocked_until` is up to date (the
-    // auth store copy may be stale after a cancel-reopen). Falls back to the
-    // auth-store record if the fetch fails.
-    let currentPro: any = user
     try {
-      currentPro = await pb.collection('users').getOne(user.id)
-    } catch {
-      currentPro = user
-    }
-    if (currentPro && currentPro.blocked_until !== blockedUntilRef.current) {
-      blockedUntilRef.current = currentPro.blocked_until || ''
-    }
-    // Keep the penalty banner in sync with the live pro record.
-    setPenaltyBalance(Number(currentPro?.penalty_balance) || 0)
+      // Platform settings & cancellation policy
+      getSettings()
+        .then(setSettings)
+        .catch(() => {})
+      getCancellationPolicy()
+        .then(setPolicy)
+        .catch(() => {})
 
-    const jobs = await getProJobs(user.id)
+      // User verification documents
+      try {
+        const docs = await getUserDocuments(user.id)
+        setDocuments(docs || [])
+      } catch (err) {
+        console.warn('[ProDashboard] Erro ao carregar documentos:', err)
+        setDocuments([])
+      }
 
-    // Hide reopened jobs that the current pro cancelled within the last 24h —
-    // they shouldn't reappear to the pro who dropped them.
-    // Also exclude jobs that this pro declined.
-    const nowMs = Date.now()
-    const visibleJobs = jobs.filter((j: any) => {
-      if (j.reopened && j.cancelled_by === user.id) {
-        const cancelledMs = j.cancelled_at ? new Date(j.cancelled_at).getTime() : 0
-        if (cancelledMs && nowMs - cancelledMs < 24 * 60 * 60 * 1000) return false
+      // Refresh the current pro's record so `blocked_until` is up to date (the
+      // auth store copy may be stale after a cancel-reopen). Falls back to the
+      // auth-store record if the fetch fails.
+      let currentPro: any = user
+      try {
+        currentPro = await pb.collection('users').getOne(user.id)
+      } catch {
+        currentPro = user
       }
-      if ((j.declined_by || []).includes(user.id)) {
-        return false
+      if (currentPro && currentPro.blocked_until !== blockedUntilRef.current) {
+        blockedUntilRef.current = currentPro.blocked_until || ''
       }
-      return true
-    })
+      // Keep the penalty banner in sync with the live pro record.
+      setPenaltyBalance(Number(currentPro?.penalty_balance) || 0)
 
-    // Exclude jobs with no valid duration (hours <= 0): they are legacy/zombie
-    // records that can't be accepted (the backend rejects them as incomplete),
-    // so showing them as an offer only leads to a confusing error.
-    // Also require a valid scheduled_at: if scheduled_at exists and is older
-    // than 2 hours in the past, do not offer.
-    const pending = visibleJobs.find((j) => {
-      if (j.status !== 'pending' || Number(j.hours || 0) <= 0) return false
-      if (j.scheduled_at) {
-        const schedTime = new Date(j.scheduled_at).getTime()
-        if (!isNaN(schedTime) && schedTime < Date.now() - 2 * 60 * 60 * 1000) return false
+      // Jobs list (pending available + accepted/in-progress/completed)
+      let jobs: any[] = []
+      try {
+        jobs = (await getProJobs(user.id)) || []
+      } catch (err) {
+        console.warn('[ProDashboard] Erro ao carregar serviços:', err)
+        jobs = []
       }
-      return true
-    })
-    if (pending) {
-      if (pending.id !== pendingJob?.id) {
-        setPendingJob(pending)
-      }
-    } else {
-      // Clear stale pending modal if it is no longer visible among pending jobs
-      if (pendingJob) {
-        setPendingJob(null)
-      }
-    }
-    setCompletedJobs(
-      visibleJobs.filter(
-        (j) =>
-          j.pro_id === user.id &&
-          ['completed'].includes(j.status) &&
-          ['held', 'disputed', 'authorized'].includes(j.payment_status || ''),
-      ),
-    )
-    setAcceptedJobs(visibleJobs.filter((j) => j.pro_id === user.id && j.status === 'accepted'))
-    setInProgressJobs(visibleJobs.filter((j) => j.pro_id === user.id && j.status === 'in_progress'))
 
-    // Monthly reincidence counter (this calendar month).
-    try {
-      const canc = await getCancellationsByUser(user.id)
-      const monthStart = new Date()
-      monthStart.setDate(1)
-      monthStart.setHours(0, 0, 0, 0)
-      const ms = monthStart.getTime()
-      setMonthlyCancellations(
-        canc.filter((c: any) => {
-          const t = c.cancelled_at ? new Date(c.cancelled_at).getTime() : 0
-          return t >= ms
-        }).length,
+      // Hide reopened jobs that the current pro cancelled within the last 24h —
+      // they shouldn't reappear to the pro who dropped them.
+      // Also exclude jobs that this pro declined.
+      const nowMs = Date.now()
+      const visibleJobs = jobs.filter((j: any) => {
+        if (!j) return false
+        if (j.reopened && j.cancelled_by === user.id) {
+          const cancelledMs = j.cancelled_at ? new Date(j.cancelled_at).getTime() : 0
+          if (cancelledMs && nowMs - cancelledMs < 24 * 60 * 60 * 1000) return false
+        }
+        if (Array.isArray(j.declined_by) && j.declined_by.includes(user.id)) {
+          return false
+        }
+        return true
+      })
+
+      // Exclude jobs with no valid duration (hours <= 0): they are legacy/zombie
+      // records that can't be accepted (the backend rejects them as incomplete),
+      // so showing them as an offer only leads to a confusing error.
+      // Also require a valid scheduled_at: if scheduled_at exists and is older
+      // than 2 hours in the past, do not offer.
+      const pending = visibleJobs.find((j) => {
+        if (j.status !== 'pending' || Number(j.hours || 0) <= 0) return false
+        if (j.scheduled_at) {
+          const schedTime = new Date(j.scheduled_at).getTime()
+          if (!isNaN(schedTime) && schedTime < Date.now() - 2 * 60 * 60 * 1000) return false
+        }
+        return true
+      })
+      if (pending) {
+        if (pending.id !== pendingJob?.id) {
+          setPendingJob(pending)
+        }
+      } else {
+        // Clear stale pending modal if it is no longer visible among pending jobs
+        if (pendingJob) {
+          setPendingJob(null)
+        }
+      }
+      setCompletedJobs(
+        visibleJobs.filter(
+          (j) =>
+            j.pro_id === user.id &&
+            ['completed'].includes(j.status) &&
+            ['held', 'disputed', 'authorized'].includes(j.payment_status || ''),
+        ),
       )
-    } catch {
-      /* intentionally ignored */
-    }
+      setAcceptedJobs(visibleJobs.filter((j) => j.pro_id === user.id && j.status === 'accepted'))
+      setInProgressJobs(
+        visibleJobs.filter((j) => j.pro_id === user.id && j.status === 'in_progress'),
+      )
 
-    // Penalty jobs (Entrega 2): jobs whose delay-driven cancel+reopen generated
-    // a debit against this pro. Shown under the yellow debt banner.
-    try {
-      const pj = await getProPenaltyJobs(user.id)
-      setPenaltyJobs(pj || [])
-    } catch {
-      setPenaltyJobs([])
+      // Monthly reincidence counter (this calendar month).
+      try {
+        const canc = await getCancellationsByUser(user.id)
+        const monthStart = new Date()
+        monthStart.setDate(1)
+        monthStart.setHours(0, 0, 0, 0)
+        const ms = monthStart.getTime()
+        setMonthlyCancellations(
+          (canc || []).filter((c: any) => {
+            const t = c.cancelled_at ? new Date(c.cancelled_at).getTime() : 0
+            return t >= ms
+          }).length,
+        )
+      } catch {
+        /* intentionally ignored */
+      }
+
+      // Penalty jobs (Entrega 2): jobs whose delay-driven cancel+reopen generated
+      // a debit against this pro. Shown under the yellow debt banner.
+      try {
+        const pj = await getProPenaltyJobs(user.id)
+        setPenaltyJobs(pj || [])
+      } catch {
+        setPenaltyJobs([])
+      }
+    } catch (err) {
+      console.error('[ProDashboard] Falha inesperada em loadData:', err)
+      // Never crash the entire screen — ensure fallback empty state
+      setDocuments((prev) => prev || [])
+      setCompletedJobs([])
+      setAcceptedJobs([])
+      setInProgressJobs([])
+      setPendingJob(null)
     }
   }
 
