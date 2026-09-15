@@ -41,6 +41,7 @@ import {
   createDocument,
   getCancellationsByUser,
   getProPenaltyJobs,
+  declineJob,
 } from '@/services/api'
 import { getSettings, DEFAULT_SETTINGS, type PlatformSettings } from '@/services/settings'
 import { getHourMultiplier, shortJobBand } from '@/lib/pricing'
@@ -126,11 +127,15 @@ export default function ProDashboard() {
 
     // Hide reopened jobs that the current pro cancelled within the last 24h —
     // they shouldn't reappear to the pro who dropped them.
+    // Also exclude jobs that this pro declined.
     const nowMs = Date.now()
     const visibleJobs = jobs.filter((j: any) => {
       if (j.reopened && j.cancelled_by === user.id) {
         const cancelledMs = j.cancelled_at ? new Date(j.cancelled_at).getTime() : 0
         if (cancelledMs && nowMs - cancelledMs < 24 * 60 * 60 * 1000) return false
+      }
+      if ((j.declined_by || []).includes(user.id)) {
+        return false
       }
       return true
     })
@@ -138,9 +143,25 @@ export default function ProDashboard() {
     // Exclude jobs with no valid duration (hours <= 0): they are legacy/zombie
     // records that can't be accepted (the backend rejects them as incomplete),
     // so showing them as an offer only leads to a confusing error.
-    const pending = visibleJobs.find((j) => j.status === 'pending' && Number(j.hours || 0) > 0)
-    if (pending && pending.id !== pendingJob?.id) {
-      setPendingJob(pending)
+    // Also require a valid scheduled_at: if scheduled_at exists and is older
+    // than 2 hours in the past, do not offer.
+    const pending = visibleJobs.find((j) => {
+      if (j.status !== 'pending' || Number(j.hours || 0) <= 0) return false
+      if (j.scheduled_at) {
+        const schedTime = new Date(j.scheduled_at).getTime()
+        if (!isNaN(schedTime) && schedTime < Date.now() - 2 * 60 * 60 * 1000) return false
+      }
+      return true
+    })
+    if (pending) {
+      if (pending.id !== pendingJob?.id) {
+        setPendingJob(pending)
+      }
+    } else {
+      // Clear stale pending modal if it is no longer visible among pending jobs
+      if (pendingJob) {
+        setPendingJob(null)
+      }
     }
     setCompletedJobs(
       visibleJobs.filter(
@@ -743,7 +764,23 @@ export default function ProDashboard() {
           </div>
 
           <DialogFooter className="flex-col sm:flex-row gap-2 mt-2">
-            <Button variant="outline" className="w-full h-12" onClick={() => setPendingJob(null)}>
+            <Button
+              variant="outline"
+              className="w-full h-12"
+              onClick={async () => {
+                const currentJob = pendingJob
+                try {
+                  if (currentJob?.id && user?.id) {
+                    await declineJob(currentJob.id, user.id)
+                  }
+                } catch (err) {
+                  console.error('Erro ao registrar recusa:', err)
+                } finally {
+                  setPendingJob(null)
+                  loadData()
+                }
+              }}
+            >
               Recusar
             </Button>
             <Button

@@ -99,6 +99,15 @@ onRecordAfterCreateSuccess((e) => {
     return
   }
 
+  // Skip pros who declined this job (defensive if job was reopened or cloned)
+  const declinedList = job.get('declined_by') || []
+  let declinedArray = []
+  if (Array.isArray(declinedList)) {
+    declinedArray = declinedList
+  } else if (typeof declinedList === 'string' && declinedList) {
+    declinedArray = [declinedList]
+  }
+
   const nowMsCreated = Date.now()
   for (let i = 0; i < pros.length; i++) {
     const pro = pros[i]
@@ -111,6 +120,7 @@ onRecordAfterCreateSuccess((e) => {
     }
     const proId = pro.getString('id')
     if (!proId || proId === customerId) continue
+    if (declinedArray.indexOf(proId) !== -1) continue
 
     try {
       const notif = new Record(notifCol)

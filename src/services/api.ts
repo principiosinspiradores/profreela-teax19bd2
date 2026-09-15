@@ -126,6 +126,14 @@ export const getUserDocuments = (userId: string) =>
   pb.collection('documents').getFullList({ filter: `user_id="${userId}"`, sort: '-created' })
 export const createDocument = (data: any) => pb.collection('documents').create(data)
 export const updateDocument = (id: string, data: any) => pb.collection('documents').update(id, data)
+export const declineJob = async (jobId: string, proId: string) => {
+  const job = await pb.collection('jobs').getOne(jobId)
+  const current: string[] = job.declined_by || []
+  if (!current.includes(proId)) {
+    await pb.collection('jobs').update(jobId, { declined_by: [...current, proId] })
+  }
+}
+
 export const getNearbyPros = async () => {
   const list = await pb.collection('users').getFullList({ filter: `role="pro" && status="active"` })
   // Suspended professionals must not appear in searches/client discovery.
