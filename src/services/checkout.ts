@@ -100,6 +100,10 @@ export async function createSplitPayment(params: {
   proAccountId: string
   description?: string
   jobId?: string
+  paymentToken?: string
+  paymentMethodId?: string
+  payerEmail?: string
+  installments?: number
 }): Promise<any> {
   const res = await pb.send('/backend/v1/payments/create-split', {
     method: 'POST',
@@ -109,6 +113,10 @@ export async function createSplitPayment(params: {
       proAccountId: params.proAccountId,
       description: params.description || 'Serviço ProFreela',
       jobId: params.jobId || '',
+      paymentToken: params.paymentToken,
+      paymentMethodId: params.paymentMethodId,
+      payerEmail: params.payerEmail,
+      installments: params.installments,
     },
   })
   return res

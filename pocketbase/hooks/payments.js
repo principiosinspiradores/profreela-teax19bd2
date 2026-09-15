@@ -144,10 +144,19 @@ routerAdd('POST', '/backend/v1/payments/create-split', (e) => {
     const payload = {
       transaction_amount: amount,
       description: description,
-      application_fee: feeAmountCents / 100,
       capture: true,
-      payer: { entity_type: 'individual' },
+      installments: parseInt(body.installments || '1', 10) || 1,
     }
+    if (body.paymentToken) {
+      payload.token = body.paymentToken
+      payload.payment_method_id = body.paymentMethodId || undefined
+    }
+    payload.payer = { entity_type: 'individual' }
+    if (body.payerEmail) payload.payer.email = body.payerEmail
+    // application_fee só quando o destino do split é conhecido (proAccountId):
+    // sem conta marketplace vinculada, o MP rejeita application_fee.
+    if (proAccountId) payload.application_fee = feeAmountCents / 100
+
     const res = $http.send({
       url: 'https://api.mercadopago.com/v1/payments',
       method: 'POST',

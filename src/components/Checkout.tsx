@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Loader2, CreditCard, ShieldCheck, Lock, Clock } from 'lucide-react'
+import { AlertTriangle, Loader2, CreditCard, ShieldCheck, Lock, Clock } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
+import { initMercadoPago, CardPayment } from '@mercadopago/sdk-react'
 import {
   getCheckoutPreview,
   createSplitPayment,
@@ -13,6 +14,9 @@ import {
   type PaymentSplit,
 } from '@/services/checkout'
 import type { PlatformSettings } from '@/services/settings'
+
+// Track initialization of Mercado Pago SDK per public key
+let initializedPublicKey = ''
 
 export interface CheckoutProps {
   /** Total amount to capture + hold in escrow on the customer's card (in BRL). */
@@ -57,15 +61,31 @@ export function Checkout({
   const [loading, setLoading] = useState(true)
   const [paying, setPaying] = useState(false)
   const [card, setCard] = useState({ number: '', name: '', expiry: '', cvc: '' })
+  const [payerEmail, setPayerEmail] = useState('')
+  const mpInitializedRef = useRef(false)
 
   useEffect(() => {
     let cancelled = false
     getCheckoutPreview(amount)
-      .then(({ settings, config, split }) => {
+      .then(({ settings, config: fetchedConfig, split: fetchedSplit }) => {
         if (cancelled) return
         setSettings(settings)
-        setConfig(config)
-        setSplit(split)
+        setConfig(fetchedConfig)
+        setSplit(fetchedSplit)
+
+        if (
+          fetchedConfig?.provider === 'mercadopago' &&
+          fetchedConfig.publicKey &&
+          initializedPublicKey !== fetchedConfig.publicKey
+        ) {
+          try {
+            initMercadoPago(fetchedConfig.publicKey, { locale: 'pt-BR' })
+            initializedPublicKey = fetchedConfig.publicKey
+            mpInitializedRef.current = true
+          } catch (e) {
+            console.error('Falha ao inicializar SDK do Mercado Pago:', e)
+          }
+        }
       })
       .finally(() => !cancelled && setLoading(false))
     return () => {
@@ -73,6 +93,25 @@ export function Checkout({
     }
   }, [amount])
 
+  const processPaymentSuccess = (result: any) => {
+    if (result?.ok || result?.id || result?.split) {
+      toast({
+        title: 'Pagamento confirmado',
+        description: result?.demo
+          ? 'Pagamento simulado (modo demo). O valor fica em garantia e é liberado ao profissional 24h após a conclusão.'
+          : 'Valor pago e mantido em garantia pela plataforma. Será liberado ao profissional 24h após a conclusão do serviço.',
+      })
+      onPaid?.(result)
+    } else {
+      toast({
+        title: 'Erro no pagamento',
+        description: result?.error || 'Não foi possível processar o pagamento.',
+        variant: 'destructive',
+      })
+    }
+  }
+
+  // Demo mode / fallback handler
   const handlePay = async () => {
     setPaying(true)
     try {
@@ -82,25 +121,42 @@ export function Checkout({
         description,
         jobId,
       })
-      if (result?.ok || result?.id || result?.split) {
-        toast({
-          title: 'Pagamento confirmado',
-          description: result?.demo
-            ? 'Pagamento simulado (modo demo). O valor fica em garantia e é liberado ao profissional 24h após a conclusão.'
-            : 'Valor pago e mantido em garantia pela plataforma. Será liberado ao profissional 24h após a conclusão do serviço.',
-        })
-        onPaid?.(result)
-      } else {
-        toast({
-          title: 'Erro no pagamento',
-          description: result?.error || 'Não foi possível processar o pagamento.',
-          variant: 'destructive',
-        })
-      }
+      processPaymentSuccess(result)
     } catch (err: any) {
       toast({
         title: 'Erro no pagamento',
         description: err?.message || 'Falha inesperada.',
+        variant: 'destructive',
+      })
+    } finally {
+      setPaying(false)
+    }
+  }
+
+  // Mercado Pago CardPayment Brick callback
+  const handleCardPaymentSubmit = async (cardFormData: any) => {
+    setPaying(true)
+    try {
+      const token = cardFormData?.token
+      const paymentMethodId = cardFormData?.payment_method_id
+      const installments = cardFormData?.installments
+      const email = cardFormData?.payer?.email || cardFormData?.payer_email || payerEmail.trim()
+
+      const result = await createSplitPayment({
+        amount,
+        proAccountId: proAccountId || '',
+        description,
+        jobId,
+        paymentToken: token,
+        paymentMethodId,
+        payerEmail: email,
+        installments: installments ? Number(installments) : 1,
+      })
+      processPaymentSuccess(result)
+    } catch (err: any) {
+      toast({
+        title: 'Erro no pagamento',
+        description: err?.message || 'Falha ao processar pagamento com cartão.',
         variant: 'destructive',
       })
     } finally {
@@ -167,62 +223,123 @@ export function Checkout({
           </div>
         )}
 
-        {/* Card form (collects data for the gateway SDK; demo-only here) */}
-        <div className="space-y-3">
-          <div className="space-y-2">
-            <Label htmlFor="card-name">Nome no cartão</Label>
-            <Input
-              id="card-name"
-              placeholder="Nome completo"
-              value={card.name}
-              onChange={(e) => setCard((c) => ({ ...c, name: e.target.value }))}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="card-number">Número do cartão</Label>
-            <Input
-              id="card-number"
-              inputMode="numeric"
-              placeholder="0000 0000 0000 0000"
-              value={card.number}
-              onChange={(e) => setCard((c) => ({ ...c, number: e.target.value }))}
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
+        {/* Real Mercado Pago flow: CardPayment Brick tokenizes directly in the browser */}
+        {config?.provider === 'mercadopago' && config?.publicKey ? (
+          <div className="space-y-4">
+            {/* Optional payer inputs if needed outside Brick */}
             <div className="space-y-2">
-              <Label htmlFor="card-expiry">Validade</Label>
+              <Label htmlFor="mp-payer-email">E-mail do pagador</Label>
               <Input
-                id="card-expiry"
-                placeholder="MM/AA"
-                value={card.expiry}
-                onChange={(e) => setCard((c) => ({ ...c, expiry: e.target.value }))}
+                id="mp-payer-email"
+                type="email"
+                placeholder="seu-email@exemplo.com"
+                value={payerEmail}
+                onChange={(e) => setPayerEmail(e.target.value)}
+                required
               />
+              <p className="text-[11px] text-muted-foreground">
+                Comprovante e notificações de pagamento serão enviados para este e-mail.
+              </p>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="card-cvc">CVC</Label>
-              <Input
-                id="card-cvc"
-                inputMode="numeric"
-                placeholder="123"
-                value={card.cvc}
-                onChange={(e) => setCard((c) => ({ ...c, cvc: e.target.value }))}
-              />
-            </div>
-          </div>
-        </div>
 
-        <Button className="w-full h-12 text-base" onClick={handlePay} disabled={paying}>
-          {paying ? (
-            <>
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Processando...
-            </>
-          ) : (
-            <>
-              <Lock className="h-4 w-4 mr-2" /> {confirmLabel || 'Pagar e solicitar'} R${' '}
-              {amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-            </>
-          )}
-        </Button>
+            <div className="rounded-lg border bg-card p-2">
+              <CardPayment
+                initialization={{
+                  amount: amount,
+                  payer: payerEmail ? { email: payerEmail } : undefined,
+                }}
+                customization={{
+                  visual: {
+                    style: {
+                      theme: 'default',
+                    },
+                  },
+                  paymentMethods: {
+                    maxInstallments: 12,
+                  },
+                }}
+                onSubmit={handleCardPaymentSubmit}
+                onError={(error) => {
+                  console.error('Erro no CardPayment Brick:', error)
+                  toast({
+                    title: 'Erro no formulário de pagamento',
+                    description: 'Verifique os dados do cartão e tente novamente.',
+                    variant: 'destructive',
+                  })
+                }}
+              />
+            </div>
+          </div>
+        ) : (
+          /* Demo mode / Gateway sem credenciais */
+          <div className="space-y-4">
+            {/* Demo notice badge / banner */}
+            <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950 flex gap-2 items-start">
+              <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <strong className="block font-semibold">Modo demonstração</strong>
+                <span>Nenhuma cobrança real será feita no cartão informado.</span>
+              </div>
+            </div>
+
+            {/* Manual card form kept for simulation */}
+            <div className="space-y-3">
+              <div className="space-y-2">
+                <Label htmlFor="card-name">Nome no cartão</Label>
+                <Input
+                  id="card-name"
+                  placeholder="Nome completo"
+                  value={card.name}
+                  onChange={(e) => setCard((c) => ({ ...c, name: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="card-number">Número do cartão</Label>
+                <Input
+                  id="card-number"
+                  inputMode="numeric"
+                  placeholder="0000 0000 0000 0000"
+                  value={card.number}
+                  onChange={(e) => setCard((c) => ({ ...c, number: e.target.value }))}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="card-expiry">Validade</Label>
+                  <Input
+                    id="card-expiry"
+                    placeholder="MM/AA"
+                    value={card.expiry}
+                    onChange={(e) => setCard((c) => ({ ...c, expiry: e.target.value }))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="card-cvc">CVC</Label>
+                  <Input
+                    id="card-cvc"
+                    inputMode="numeric"
+                    placeholder="123"
+                    value={card.cvc}
+                    onChange={(e) => setCard((c) => ({ ...c, cvc: e.target.value }))}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <Button className="w-full h-12 text-base" onClick={handlePay} disabled={paying}>
+              {paying ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Processando...
+                </>
+              ) : (
+                <>
+                  <Lock className="h-4 w-4 mr-2" /> {confirmLabel || 'Pagar e solicitar'} R${' '}
+                  {amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                </>
+              )}
+            </Button>
+          </div>
+        )}
 
         <p className="text-xs text-center text-muted-foreground flex items-center justify-center gap-1">
           <Clock className="h-3 w-3" /> Valor liberado ao profissional{' '}
