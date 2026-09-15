@@ -28,6 +28,7 @@ import AdminReviews from './pages/admin/Reviews'
 import Chat from './pages/Chat'
 import TermsOfService from './pages/legal/TermsOfService'
 import PrivacyPolicy from './pages/legal/PrivacyPolicy'
+import ResetPassword from './pages/public/ResetPassword'
 
 /**
  * Route guard: only allows authenticated users with one of `allowedRoles`.
@@ -188,7 +189,8 @@ const AppRoutes = () => (
       />
     </Route>
 
-    {/* Public legal pages — no auth required, self-contained layout */}
+    {/* Public legal and auth recovery pages — no auth required, self-contained layout */}
+    <Route path="/reset-password" element={<ResetPassword />} />
     <Route path="/termos" element={<TermsOfService />} />
     <Route path="/privacidade" element={<PrivacyPolicy />} />
 
