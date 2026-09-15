@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-08T13:14:23.185Z",
+  "generatedAt": "2026-09-15T15:18:45.413Z",
   "collections": [
     {
       "name": "users",
@@ -29,28 +29,41 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         },
         {
           "name": "role",
           "type": "select",
           "required": true,
           "system": false,
-          "selectValues": ["client", "pro", "admin"]
+          "selectValues": [
+            "client",
+            "pro",
+            "admin"
+          ]
         },
         {
           "name": "status",
           "type": "select",
           "required": false,
           "system": false,
-          "selectValues": ["pending", "active", "blocked"]
+          "selectValues": [
+            "pending",
+            "active",
+            "blocked"
+          ]
         },
         {
           "name": "terms_accepted",
@@ -152,14 +165,19 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         }
       ],
       "indexes": []
@@ -201,7 +219,13 @@
           "type": "select",
           "required": true,
           "system": false,
-          "selectValues": ["pending", "accepted", "in_progress", "completed", "cancelled"]
+          "selectValues": [
+            "pending",
+            "accepted",
+            "in_progress",
+            "completed",
+            "cancelled"
+          ]
         },
         {
           "name": "price",
@@ -214,7 +238,10 @@
           "type": "select",
           "required": false,
           "system": false,
-          "selectValues": ["scheduled", "emergency"]
+          "selectValues": [
+            "scheduled",
+            "emergency"
+          ]
         },
         {
           "name": "address",
@@ -251,14 +278,19 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         },
         {
           "name": "payment_intent_id",
@@ -401,7 +433,11 @@
           "type": "select",
           "required": false,
           "system": false,
-          "selectValues": ["extend_1h", "extend_2h", "cancel_reopen"]
+          "selectValues": [
+            "extend_1h",
+            "extend_2h",
+            "cancel_reopen"
+          ]
         },
         {
           "name": "client_delay_responded_at",
@@ -459,7 +495,10 @@
           "type": "select",
           "required": true,
           "system": false,
-          "selectValues": ["immediate", "recurring"]
+          "selectValues": [
+            "immediate",
+            "recurring"
+          ]
         },
         {
           "name": "start_date",
@@ -484,14 +523,19 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         }
       ],
       "indexes": []
@@ -545,14 +589,19 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         }
       ],
       "indexes": [
@@ -565,11 +614,11 @@
       "name": "documents",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != ''",
-        "view": "@request.auth.id != ''",
-        "create": "@request.auth.id != ''",
-        "update": "@request.auth.id != ''",
-        "delete": "@request.auth.id != ''"
+        "list": "@request.auth.id != '' && (user_id = @request.auth.id || @request.auth.role = 'admin')",
+        "view": "@request.auth.id != '' && (user_id = @request.auth.id || @request.auth.role = 'admin')",
+        "create": "@request.auth.id != '' && user_id = @request.auth.id",
+        "update": "@request.auth.id != '' && (user_id = @request.auth.id || @request.auth.role = 'admin')",
+        "delete": null
       },
       "fields": [
         {
@@ -596,24 +645,60 @@
           "type": "select",
           "required": true,
           "system": false,
-          "selectValues": ["pending", "approved", "rejected"]
+          "selectValues": [
+            "pending",
+            "approved",
+            "rejected"
+          ]
         },
         {
           "name": "created",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
+        },
+        {
+          "name": "reviewed_at",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "reviewed_by",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "reviewer_note",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "resubmit_count",
+          "type": "number",
+          "required": false,
+          "system": false
         }
       ],
-      "indexes": []
+      "indexes": [
+        "CREATE INDEX `idx_documents_user_status` ON `documents` (user_id,status)"
+      ]
     },
     {
       "name": "notifications",
@@ -656,21 +741,31 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         },
         {
           "name": "type",
           "type": "select",
           "required": false,
           "system": false,
-          "selectValues": ["new_job", "review_request", "payment", "system"]
+          "selectValues": [
+            "new_job",
+            "review_request",
+            "payment",
+            "system"
+          ]
         },
         {
           "name": "job_id",
@@ -712,14 +807,19 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         }
       ],
       "indexes": []
@@ -764,14 +864,19 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         }
       ],
       "indexes": []
@@ -799,7 +904,10 @@
           "type": "select",
           "required": true,
           "system": false,
-          "selectValues": ["warning", "block"]
+          "selectValues": [
+            "warning",
+            "block"
+          ]
         },
         {
           "name": "reason",
@@ -818,14 +926,19 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         }
       ],
       "indexes": []
@@ -912,14 +1025,19 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         },
         {
           "name": "guarantee_period_days",
@@ -1048,14 +1166,19 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         }
       ],
       "indexes": []
@@ -1090,7 +1213,10 @@
           "type": "select",
           "required": false,
           "system": false,
-          "selectValues": ["client", "pro"]
+          "selectValues": [
+            "client",
+            "pro"
+          ]
         },
         {
           "name": "cancelled_at",
@@ -1115,21 +1241,30 @@
           "type": "select",
           "required": false,
           "system": false,
-          "selectValues": ["pending", "charged", "waived"]
+          "selectValues": [
+            "pending",
+            "charged",
+            "waived"
+          ]
         },
         {
           "name": "created",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         }
       ],
       "indexes": [
@@ -1184,17 +1319,24 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         }
       ],
-      "indexes": ["CREATE INDEX idx_saved_locations_client ON saved_locations (client_id)"]
+      "indexes": [
+        "CREATE INDEX idx_saved_locations_client ON saved_locations (client_id)"
+      ]
     },
     {
       "name": "job_photos",
@@ -1219,7 +1361,10 @@
           "type": "select",
           "required": true,
           "system": false,
-          "selectValues": ["start", "end"]
+          "selectValues": [
+            "start",
+            "end"
+          ]
         },
         {
           "name": "photo_file",
@@ -1232,17 +1377,24 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         }
       ],
-      "indexes": ["CREATE INDEX idx_job_photos_job ON job_photos (job_id)"]
+      "indexes": [
+        "CREATE INDEX idx_job_photos_job ON job_photos (job_id)"
+      ]
     },
     {
       "name": "messages",
@@ -1286,17 +1438,24 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         }
       ],
-      "indexes": ["CREATE INDEX idx_messages_job ON messages (job)"]
+      "indexes": [
+        "CREATE INDEX idx_messages_job ON messages (job)"
+      ]
     },
     {
       "name": "disintermediation_alerts",
@@ -1347,14 +1506,19 @@
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate"]
+          "autodateTriggers": [
+            "onCreate"
+          ]
         },
         {
           "name": "updated",
           "type": "autodate",
           "required": false,
           "system": false,
-          "autodateTriggers": ["onCreate", "onUpdate"]
+          "autodateTriggers": [
+            "onCreate",
+            "onUpdate"
+          ]
         }
       ],
       "indexes": [

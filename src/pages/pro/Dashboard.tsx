@@ -373,6 +373,11 @@ export default function ProDashboard() {
                     {documents[0].status === 'pending' ? 'Em análise' : 'Rejeitado'}
                   </span>
                 </p>
+                {documents[0].status === 'rejected' && documents[0].reviewer_note && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    <strong>Motivo:</strong> {documents[0].reviewer_note}
+                  </p>
+                )}
               </div>
             )}
           </CardContent>
