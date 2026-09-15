@@ -50,7 +50,7 @@ export function AppSidebar() {
         return [
           { title: 'Visão Geral', url: '/admin', icon: BarChart3 },
           { title: 'Usuários', url: '/admin/users', icon: Users },
-          { title: 'Documentos', url: '/admin/documentos', icon: FileCheck2 },
+          { title: 'Documentos', url: '/admin/documents', icon: FileCheck2 },
           { title: 'Avaliações', url: '/admin/reviews', icon: Star },
           { title: 'Preços Dinâmicos', url: '/admin/pricing', icon: Wallet },
           { title: 'Configurações', url: '/admin/settings', icon: Settings },

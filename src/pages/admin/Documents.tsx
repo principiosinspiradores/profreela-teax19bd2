@@ -76,7 +76,7 @@ export default function AdminDocuments() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const list = await getDocumentsByStatus(filter)
+      const list = await getDocumentsByStatus('all')
       setDocs(list)
     } catch (err) {
       toast({
@@ -87,14 +87,11 @@ export default function AdminDocuments() {
     } finally {
       setLoading(false)
     }
-  }, [filter, toast])
+  }, [toast])
 
   useEffect(() => {
     load()
   }, [load])
-
-  const docUserId = (doc: DocumentRecord): string =>
-    typeof doc.user_id === 'string' ? doc.user_id : doc.user_id?.id || ''
 
   const docUserName = (doc: DocumentRecord): string => {
     const u = doc.expand?.user_id

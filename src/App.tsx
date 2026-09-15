@@ -25,6 +25,7 @@ import AdminUsers from './pages/admin/Users'
 import AdminDocuments from './pages/admin/Documents'
 import AdminPricing from './pages/admin/Pricing'
 import AdminReviews from './pages/admin/Reviews'
+import AdminDocuments from './pages/admin/Documents'
 import Chat from './pages/Chat'
 import TermsOfService from './pages/legal/TermsOfService'
 import PrivacyPolicy from './pages/legal/PrivacyPolicy'
@@ -183,6 +184,14 @@ const AppRoutes = () => (
         element={
           <ProtectedRoute allowedRoles={['admin']}>
             <AdminReviews />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/admin/documents"
+        element={
+          <ProtectedRoute allowedRoles={['admin']}>
+            <AdminDocuments />
           </ProtectedRoute>
         }
       />
