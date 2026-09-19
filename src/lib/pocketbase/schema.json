@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-19T13:15:36.713Z",
+  "generatedAt": "2026-09-19T21:41:04.453Z",
   "collections": [
     {
       "name": "users",
@@ -439,6 +439,18 @@
           "required": false,
           "system": false,
           "collectionRef": "users"
+        },
+        {
+          "name": "auto_completed",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "completed_by",
+          "type": "text",
+          "required": false,
+          "system": false
         }
       ],
       "indexes": []

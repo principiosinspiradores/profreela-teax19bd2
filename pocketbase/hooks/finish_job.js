@@ -81,6 +81,22 @@ routerAdd(
       })
     }
 
+    // --- deadline calculation (started_at + hours + 2h tolerance) ----------
+    const nowMs = Date.now()
+    const startedAtStr = job.getString('started_at') || job.getString('clocked_in_at')
+    let isPastDeadline = false
+    if (startedAtStr) {
+      const startMs = new Date(startedAtStr).getTime()
+      if (!isNaN(startMs)) {
+        let hrs = job.getFloat('hours')
+        if (!hrs || hrs <= 0) hrs = 1
+        const deadlineMs = startMs + hrs * 60 * 60 * 1000 + 2 * 60 * 60 * 1000
+        if (nowMs > deadlineMs) {
+          isPastDeadline = true
+        }
+      }
+    }
+
     // --- geofence check (50m) ----------------------------------------------
     const jobLat = job.getFloat('latitude')
     const jobLng = job.getFloat('longitude')
@@ -91,20 +107,25 @@ routerAdd(
     const hasJobCoords = !isNaN(jobLat) && !isNaN(jobLng) && jobLat !== 0
     const hasProCoords = proLatRaw != null && proLngRaw != null && !isNaN(proLat) && !isNaN(proLng)
 
+    let isOutsideGeofence = false
     if (hasJobCoords && hasProCoords) {
       const dist = haversineMeters(proLat, proLng, jobLat, jobLng)
       if (dist > GEOFENCE_RADIUS_M) {
-        return e.json(403, {
-          ok: false,
-          error: 'Você precisa estar no local para finalizar o serviço.',
-          code: 'OUTSIDE_GEOFENCE',
-          distance_m: Math.round(dist),
-          radius_m: GEOFENCE_RADIUS_M,
-        })
+        isOutsideGeofence = true
+        // If not past deadline, strictly block finalization outside the geofence
+        if (!isPastDeadline) {
+          return e.json(403, {
+            ok: false,
+            error: 'Você precisa estar no local para finalizar o serviço.',
+            code: 'OUTSIDE_GEOFENCE',
+            distance_m: Math.round(dist),
+            radius_m: GEOFENCE_RADIUS_M,
+          })
+        }
       }
     }
 
-    // --- end evidence photo (required) -------------------------------------
+    // --- end evidence photo (required in all cases) -------------------------
     let hasEndPhoto = false
     try {
       const photos = $app.findRecordsByFilter(
@@ -126,10 +147,37 @@ routerAdd(
     }
 
     // --- complete the job ---------------------------------------------------
-    const nowIso = new Date().toISOString()
+    const nowIso = new Date(nowMs).toISOString()
+    const completedBy = isPastDeadline ? 'pro_late' : 'pro'
     job.set('status', 'completed')
     job.set('completed_at', nowIso)
+    job.set('completed_by', completedBy)
     $app.save(job)
+
+    // If finished late and outside the perimeter, notify the client
+    if (isPastDeadline && isOutsideGeofence) {
+      const customerId = job.getString('customer_id')
+      if (customerId) {
+        try {
+          const notifCol = $app.findCollectionByNameOrId('notifications')
+          if (notifCol) {
+            const clientNotif = new Record(notifCol)
+            clientNotif.set('user_id', customerId)
+            clientNotif.set('type', 'system')
+            clientNotif.set('title', 'Serviço finalizado após o prazo')
+            clientNotif.set(
+              'message',
+              'O serviço foi finalizado após o horário previsto e fora do perímetro do local.',
+            )
+            clientNotif.set('job_id', jobId)
+            clientNotif.set('read_status', false)
+            $app.save(clientNotif)
+          }
+        } catch (err) {
+          console.log('[finish_job] falha ao notificar cliente sobre pro_late:', err)
+        }
+      }
+    }
 
     // --- start the 24h guarantee window (payment release) -------------------
     // In the pay-at-request flow the payment is already `held` from job

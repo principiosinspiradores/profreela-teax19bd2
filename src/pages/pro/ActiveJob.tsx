@@ -277,6 +277,23 @@ export default function ActiveJob() {
   const withinGeofence = isWithinGeofence(coords, jobCoords)
   const metersAway = coords && jobCoords ? Math.round(haversineMeters(coords, jobCoords)) : null
 
+  // Overtime / deadline calculation for in_progress jobs
+  const startedAtStr = job?.started_at || job?.clocked_in_at
+  const startMs = startedAtStr ? new Date(startedAtStr).getTime() : 0
+  const jobHours = Number(job?.hours) > 0 ? Number(job?.hours) : 1
+  const durationMs = jobHours * 60 * 60 * 1000
+  const toleranceMs = 2 * 60 * 60 * 1000
+  const isTimeExceeded =
+    job?.status === 'in_progress' &&
+    !isNaN(startMs) &&
+    startMs > 0 &&
+    Date.now() > startMs + durationMs
+  const isPastLateDeadline =
+    job?.status === 'in_progress' &&
+    !isNaN(startMs) &&
+    startMs > 0 &&
+    Date.now() > startMs + durationMs + toleranceMs
+
   const scheduledMs = job?.scheduled_at ? new Date(job.scheduled_at).getTime() : 0
   const nowMs = Date.now()
   const remainingMs = scheduledMs ? scheduledMs - nowMs : 0
@@ -365,7 +382,8 @@ export default function ActiveJob() {
   }
 
   const handleEndPhoto = () => {
-    if (coords && jobCoords && !withinGeofence) {
+    // If not past the deadline (+2h), require being inside geofence
+    if (coords && jobCoords && !withinGeofence && !isPastLateDeadline) {
       toast({
         title: 'Fora da área',
         description: 'Você precisa estar no local para finalizar o serviço.',
@@ -459,8 +477,8 @@ export default function ActiveJob() {
 
   const handleFinish = async () => {
     if (!jobId || finishing) return
-    // Client-side geofence gate (mirrors the backend check).
-    if (coords && jobCoords && !withinGeofence) {
+    // Client-side geofence gate (mirrors the backend check: bypassed only when past deadline + 2h).
+    if (coords && jobCoords && !withinGeofence && !isPastLateDeadline) {
       toast({
         title: 'Fora da área',
         description: 'Você precisa estar no local para finalizar o serviço.',
@@ -485,7 +503,9 @@ export default function ActiveJob() {
       }
       toast({
         title: 'Serviço finalizado',
-        description: 'Iniciado o período de garantia de 7 dias. O pagamento será liberado após.',
+        description: isPastLateDeadline
+          ? 'Serviço finalizado fora do prazo. O período de garantia de 24h foi iniciado.'
+          : 'Iniciado o período de garantia de 24h. O pagamento será liberado após.',
       })
       navigate('/pro')
     } catch (err: any) {
@@ -628,6 +648,22 @@ export default function ActiveJob() {
             </div>
           )}
 
+          {/* Overtime warning banner (when job in_progress exceeded scheduled duration) */}
+          {isTimeExceeded && step !== 'finished' && (
+            <div className="flex items-start gap-2.5 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 shadow-sm animate-pulse">
+              <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <p className="font-semibold text-amber-950">Tempo do serviço excedido</p>
+                <p className="text-xs text-amber-800 mt-0.5">
+                  Tempo do serviço excedido — finalize com a foto de encerramento.{' '}
+                  {isPastLateDeadline
+                    ? 'A tolerância de 2h foi atingida; você pode finalizar de onde estiver com a foto obrigatória.'
+                    : 'Após 2h de tolerância o sistema encerra automaticamente.'}
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Geofence status strip (shown from arrival onwards) */}
           {step !== 'transit' && step !== 'finished' && (
             <div
@@ -635,7 +671,9 @@ export default function ActiveJob() {
                 'flex items-center gap-2 rounded-lg border px-3 py-2 text-sm ' +
                 (withinGeofence
                   ? 'border-green-200 bg-green-50 text-green-800'
-                  : 'border-amber-200 bg-amber-50 text-amber-800')
+                  : isPastLateDeadline
+                    ? 'border-blue-200 bg-blue-50 text-blue-800'
+                    : 'border-amber-200 bg-amber-50 text-amber-800')
               }
             >
               <MapPinned className="h-4 w-4 shrink-0" />
@@ -643,7 +681,9 @@ export default function ActiveJob() {
                 <span>
                   {withinGeofence
                     ? `Você está no local (a ~${metersAway}m do destino).`
-                    : `Você está a ~${metersAway}m do destino. Aproxime-se (raio de ${GEOFENCE_RADIUS_M}m) para iniciar/finalizar.`}
+                    : isPastLateDeadline
+                      ? `Você está fora da cerca (~${metersAway}m), mas o prazo foi excedido. Você pode finalizar aqui com a foto obrigatória.`
+                      : `Você está a ~${metersAway}m do destino. Aproxime-se (raio de ${GEOFENCE_RADIUS_M}m) para iniciar/finalizar.`}
                 </span>
               ) : (
                 <span>Localizando você para validar a presença no local…</span>

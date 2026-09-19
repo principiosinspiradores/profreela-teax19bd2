@@ -600,40 +600,66 @@ export default function ProDashboard() {
                 <Play className="h-4 w-4 text-secondary" />
                 <p className="font-semibold text-sm">Em andamento</p>
               </div>
-              {inProgressJobs.map((job) => (
-                <div
-                  key={job.id}
-                  className="flex flex-wrap items-center justify-between gap-2 border-t pt-2"
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium truncate">
-                      {job.expand?.service_id?.name || 'Serviço'}
-                    </p>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {formatScheduledSlot(job.scheduled_at, job.hours)}
-                    </p>
-                    <p className="text-xs text-muted-foreground truncate">{job.address}</p>
+              {inProgressJobs.map((job) => {
+                const startedAtStr = job.started_at || job.clocked_in_at
+                const startMs = startedAtStr ? new Date(startedAtStr).getTime() : 0
+                const jobHours = Number(job.hours) > 0 ? Number(job.hours) : 1
+                const durationMs = jobHours * 60 * 60 * 1000
+                const isOvertime =
+                  !isNaN(startMs) && startMs > 0 && Date.now() > startMs + durationMs
+
+                return (
+                  <div key={job.id} className="space-y-2 border-t pt-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-medium truncate">
+                            {job.expand?.service_id?.name || 'Serviço'}
+                          </p>
+                          {isOvertime && (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-900 border border-amber-300">
+                              <AlertTriangle className="h-3 w-3 text-amber-700" />
+                              Tempo excedido
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {formatScheduledSlot(job.scheduled_at, job.hours)}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate">{job.address}</p>
+                      </div>
+                      <div className="flex gap-2 flex-wrap">
+                        <Button size="sm" onClick={() => navigate(`/pro/job/${job.id}`)}>
+                          <Navigation2 className="h-4 w-4 mr-1" /> Continuar serviço
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => navigate(`/chat/${job.id}`)}
+                          className="relative"
+                        >
+                          <MessageCircle className="h-4 w-4 mr-1" /> Mensagens
+                          {unreadMessages.counts[job.id] > 0 && (
+                            <span className="absolute -top-1.5 -right-1.5 h-4 min-w-4 px-1 flex items-center justify-center rounded-full bg-primary text-primary-foreground text-[10px] font-semibold border-2 border-background">
+                              {unreadMessages.counts[job.id]}
+                            </span>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+
+                    {isOvertime && (
+                      <div className="rounded-lg border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900 flex items-start gap-2">
+                        <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                        <div>
+                          <strong>Tempo do serviço excedido</strong> — finalize com a foto de
+                          encerramento. Após 2h de tolerância o sistema encerra automaticamente.
+                        </div>
+                      </div>
+                    )}
                   </div>
-                  <div className="flex gap-2 flex-wrap">
-                    <Button size="sm" onClick={() => navigate(`/pro/job/${job.id}`)}>
-                      <Navigation2 className="h-4 w-4 mr-1" /> Continuar serviço
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => navigate(`/chat/${job.id}`)}
-                      className="relative"
-                    >
-                      <MessageCircle className="h-4 w-4 mr-1" /> Mensagens
-                      {unreadMessages.counts[job.id] > 0 && (
-                        <span className="absolute -top-1.5 -right-1.5 h-4 min-w-4 px-1 flex items-center justify-center rounded-full bg-primary text-primary-foreground text-[10px] font-semibold border-2 border-background">
-                          {unreadMessages.counts[job.id]}
-                        </span>
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </CardContent>
           </Card>
         )}
