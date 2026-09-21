@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-19T21:41:04.453Z",
+  "generatedAt": "2026-09-21T13:18:57.284Z",
   "collections": [
     {
       "name": "users",
@@ -1404,6 +1404,221 @@
       "indexes": [
         "CREATE INDEX idx_disintermediation_alerts_job ON disintermediation_alerts (job)",
         "CREATE INDEX idx_disintermediation_alerts_created ON disintermediation_alerts (created DESC)"
+      ]
+    },
+    {
+      "name": "pro_payment_accounts",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && (user_id = @request.auth.id || @request.auth.role = 'admin')",
+        "view": "@request.auth.id != '' && (user_id = @request.auth.id || @request.auth.role = 'admin')",
+        "create": "@request.auth.id != '' && user_id = @request.auth.id",
+        "update": "@request.auth.id != '' && (user_id = @request.auth.id || @request.auth.role = 'admin')",
+        "delete": "@request.auth.id != '' && @request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "user_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "holder_name",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "doc_type",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["cpf", "cnpj"]
+        },
+        {
+          "name": "doc_number",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "pix_key_type",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["cpf", "cnpj", "email", "phone", "random", "none"]
+        },
+        {
+          "name": "pix_key",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "bank_name",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "bank_agency",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "bank_account",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["pending", "verified", "rejected"]
+        },
+        {
+          "name": "reviewed_at",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "reviewed_by",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "reviewer_note",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_pro_payment_accounts_user ON pro_payment_accounts (user_id)",
+        "CREATE INDEX idx_pro_payment_accounts_status ON pro_payment_accounts (status)"
+      ]
+    },
+    {
+      "name": "payouts",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && (pro_id = @request.auth.id || @request.auth.role = 'admin')",
+        "view": "@request.auth.id != '' && (pro_id = @request.auth.id || @request.auth.role = 'admin')",
+        "create": "@request.auth.role = 'admin'",
+        "update": "@request.auth.role = 'admin'",
+        "delete": "@request.auth.role = 'admin'"
+      },
+      "fields": [
+        {
+          "name": "pro_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "job_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "jobs"
+        },
+        {
+          "name": "amount_gross",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "platform_fee",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "penalty_debit",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "amount_net",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "status",
+          "type": "select",
+          "required": false,
+          "system": false,
+          "selectValues": ["pending", "paid", "failed"]
+        },
+        {
+          "name": "method",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "external_id",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "paid_at",
+          "type": "date",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "notes",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE UNIQUE INDEX idx_payouts_job ON payouts (job_id)",
+        "CREATE INDEX idx_payouts_pro ON payouts (pro_id, created DESC)",
+        "CREATE INDEX idx_payouts_status ON payouts (status)"
       ]
     }
   ]

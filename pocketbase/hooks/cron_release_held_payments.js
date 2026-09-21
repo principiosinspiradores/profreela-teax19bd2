@@ -158,12 +158,14 @@ cronAdd('release_held_payments', '*/15 * * * *', () => {
         // delay-driven cancel+reopen), collect it from the released payout:
         // debit = min(penalty_balance, payout). The pro's penalty_balance is
         // reduced and a debit transaction notification is recorded.
+        let penaltyDebitApplied = 0
         try {
           const proRec = $app.findFirstRecordByData('users', 'id', proId)
           const debt = proRec.getFloat('penalty_balance') || 0
           const payout = job.getFloat('price') || 0
           if (debt > 0 && payout > 0) {
             const roundedDebit = Math.round(Math.min(debt, payout) * 100) / 100
+            penaltyDebitApplied = roundedDebit
             const newBalance = Math.max(0, Math.round((debt - roundedDebit) * 100) / 100)
             proRec.set('penalty_balance', newBalance)
             $app.save(proRec)
@@ -197,6 +199,65 @@ cronAdd('release_held_payments', '*/15 * * * *', () => {
           }
         } catch (err) {
           console.log('[release_held_payments] falha ao debitar penalty do pro', proId, err)
+        }
+
+        // --- create payout record (idempotent) -----------------------------
+        try {
+          let existingPayout = null
+          try {
+            existingPayout = $app.findFirstRecordByData('payouts', 'job_id', jobId)
+          } catch (_) {}
+
+          if (!existingPayout) {
+            let feePercent = 15
+            try {
+              const sRows = $app.findRecordsByFilter('settings', '1=1', '', 1, 0)
+              if (sRows.length > 0) {
+                const fp = sRows[0].getFloat('service_fee_percent')
+                if (fp > 0) feePercent = fp
+              }
+            } catch (_) {}
+
+            const clientPrice = job.getFloat('client_price')
+            const price = job.getFloat('price')
+            const gross = clientPrice > 0 ? clientPrice : price > 0 ? price : 0
+            const platformFee = Math.round(gross * (feePercent / 100) * 100) / 100
+            const amountNet = Math.max(
+              0,
+              Math.round((gross - platformFee - penaltyDebitApplied) * 100) / 100,
+            )
+
+            const payoutsCol = $app.findCollectionByNameOrId('payouts')
+            const payoutRec = new Record(payoutsCol)
+            payoutRec.set('pro_id', proId)
+            payoutRec.set('job_id', jobId)
+            payoutRec.set('amount_gross', gross)
+            payoutRec.set('platform_fee', platformFee)
+            payoutRec.set('penalty_debit', penaltyDebitApplied)
+            payoutRec.set('amount_net', amountNet)
+            payoutRec.set('status', 'pending')
+            payoutRec.set('method', 'pix')
+            payoutRec.set('external_id', '')
+            payoutRec.set('notes', '')
+            $app.save(payoutRec)
+
+            console.log(
+              '[release_held_payments] payout criado — pro',
+              proId,
+              'job',
+              jobId,
+              'gross',
+              gross,
+              'fee',
+              platformFee,
+              'penalty',
+              penaltyDebitApplied,
+              'net',
+              amountNet,
+            )
+          }
+        } catch (err) {
+          console.log('[release_held_payments] falha ao criar payout:', err)
         }
       }
     } catch (err) {

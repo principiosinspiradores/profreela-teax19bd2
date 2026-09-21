@@ -28,6 +28,11 @@ import {
   RefreshCw,
   Scale,
   HandCoins,
+  Banknote,
+  CheckCircle2,
+  XCircle,
+  Coins,
+  Building2,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -46,6 +51,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { Link } from 'react-router-dom'
 import {
   getModerationLogs,
@@ -65,11 +73,24 @@ import {
   type ChatDisintermediationAlert,
 } from '@/services/api'
 import { releasePayment, cancelAuthorization, captureSplitPayment } from '@/services/checkout'
+import {
+  getAllProPaymentAccounts,
+  getAllPayouts,
+  reviewProPaymentAccount,
+  markPayoutAsPaid,
+  markPayoutAsFailed,
+  formatCPF,
+  formatCNPJ,
+  formatPixKey,
+  ProPaymentAccount,
+  PayoutRecord,
+} from '@/services/payouts'
 import { jobStatusLabel } from '@/lib/jobStatus'
 import { formatPhoneNumber } from '@/lib/phone'
 import { getAvatarUrl } from '@/lib/avatar'
 import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
+import { useAuth } from '@/hooks/use-auth'
 
 const demandData = [
   { time: '06:00', demand: 40, supply: 60 },
@@ -111,6 +132,31 @@ export default function AdminDashboard() {
   // Advertir/Bloquear buttons are hidden.
   const [moderationPro, setModerationPro] = useState<any | null>(null)
   const [moderating, setModerating] = useState(false)
+
+  // Payments / Payouts state
+  const { user: authUser } = useAuth()
+  const [accounts, setAccounts] = useState<ProPaymentAccount[]>([])
+  const [payouts, setPayouts] = useState<PayoutRecord[]>([])
+  const [loadingAccounts, setLoadingAccounts] = useState(false)
+  const [loadingPayouts, setLoadingPayouts] = useState(false)
+  const [accountsFilter, setAccountsFilter] = useState<string>('all')
+  const [payoutsFilter, setPayoutsFilter] = useState<string>('pending')
+
+  // Review account modal
+  const [reviewAccountModal, setReviewAccountModal] = useState<{
+    account: ProPaymentAccount
+    action: 'verified' | 'rejected'
+  } | null>(null)
+  const [reviewerNote, setReviewerNote] = useState('')
+  const [reviewingAccount, setReviewingAccount] = useState(false)
+
+  // Mark payout modal (paid or failed)
+  const [payoutActionModal, setPayoutActionModal] = useState<{
+    payout: PayoutRecord
+    action: 'paid' | 'failed'
+  } | null>(null)
+  const [payoutNotes, setPayoutNotes] = useState('')
+  const [processingPayout, setProcessingPayout] = useState(false)
 
   const { toast } = useToast()
 
@@ -166,6 +212,99 @@ export default function AdminDashboard() {
       console.error('Failed to load penalties', err)
     } finally {
       setLoadingPenalties(false)
+    }
+  }
+
+  const loadAccounts = async (statusFilter = accountsFilter) => {
+    setLoadingAccounts(true)
+    try {
+      const accList = await getAllProPaymentAccounts(statusFilter)
+      setAccounts(accList)
+    } catch (err) {
+      console.error('Failed to load payment accounts', err)
+    } finally {
+      setLoadingAccounts(false)
+    }
+  }
+
+  const loadPayouts = async (statusFilter = payoutsFilter) => {
+    setLoadingPayouts(true)
+    try {
+      const pList = await getAllPayouts(statusFilter)
+      setPayouts(pList)
+    } catch (err) {
+      console.error('Failed to load payouts', err)
+    } finally {
+      setLoadingPayouts(false)
+    }
+  }
+
+  const handleReviewAccount = async () => {
+    if (!reviewAccountModal || !authUser?.id) return
+    const { account, action } = reviewAccountModal
+    setReviewingAccount(true)
+    try {
+      await reviewProPaymentAccount(account.id, action, authUser.id, reviewerNote)
+      toast({
+        title: action === 'verified' ? 'Conta aprovada' : 'Conta rejeitada',
+        description:
+          action === 'verified'
+            ? `Conta de ${account.holder_name} foi verificada com sucesso.`
+            : `Conta de ${account.holder_name} foi rejeitada.`,
+      })
+      setReviewAccountModal(null)
+      setReviewerNote('')
+      loadAccounts(accountsFilter)
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao analisar conta',
+        description: err?.message || 'Não foi possível salvar a revisão.',
+        variant: 'destructive',
+      })
+    } finally {
+      setReviewingAccount(false)
+    }
+  }
+
+  const handleExecutePayoutAction = async () => {
+    if (!payoutActionModal) return
+    const { payout, action } = payoutActionModal
+    if (action === 'failed' && !payoutNotes.trim()) {
+      toast({
+        title: 'Motivo obrigatório',
+        description: 'Informe o motivo da falha do repasse.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setProcessingPayout(true)
+    try {
+      if (action === 'paid') {
+        await markPayoutAsPaid(payout.id, payoutNotes)
+        toast({
+          title: 'Repasse marcado como pago',
+          description: `Repasse no valor de R$ ${payout.amount_net.toFixed(2)} registrado como pago via Pix.`,
+        })
+      } else {
+        await markPayoutAsFailed(payout.id, payoutNotes)
+        toast({
+          title: 'Repasse marcado como falho',
+          description: 'O status do repasse foi atualizado para falha.',
+          variant: 'destructive',
+        })
+      }
+      setPayoutActionModal(null)
+      setPayoutNotes('')
+      loadPayouts(payoutsFilter)
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao atualizar repasse',
+        description: err?.message || 'Não foi possível atualizar o repasse.',
+        variant: 'destructive',
+      })
+    } finally {
+      setProcessingPayout(false)
     }
   }
 
@@ -252,6 +391,8 @@ export default function AdminDashboard() {
     loadAllJobs()
     loadPenalties()
     loadModerationPro()
+    loadAccounts()
+    loadPayouts()
   }, [])
 
   useRealtime('documents', loadDocs)
@@ -259,9 +400,16 @@ export default function AdminDashboard() {
     loadAlerts()
     loadAllJobs()
     loadPenalties()
+    loadPayouts()
   })
   useRealtime('disintermediation_alerts', () => {
     loadAlerts()
+  })
+  useRealtime('pro_payment_accounts', () => {
+    loadAccounts()
+  })
+  useRealtime('payouts', () => {
+    loadPayouts()
   })
 
   const handleToggleUnlockPhone = async (jobId: string, currentUnlocked: boolean) => {
@@ -373,6 +521,18 @@ export default function AdminDashboard() {
             {jobs.filter((j) => j.payment_status === 'disputed').length > 0 && (
               <Badge variant="destructive" className="ml-1.5 px-1.5 py-0 text-[10px] h-4">
                 {jobs.filter((j) => j.payment_status === 'disputed').length}
+              </Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="payouts" className="relative flex items-center gap-1.5">
+            <Banknote className="h-4 w-4" />
+            Repasses / Contas
+            {accounts.filter((a) => a.status === 'pending').length +
+              payouts.filter((p) => p.status === 'pending').length >
+              0 && (
+              <Badge className="ml-1.5 px-1.5 py-0 text-[10px] h-4 bg-amber-500 hover:bg-amber-600 text-white">
+                {accounts.filter((a) => a.status === 'pending').length +
+                  payouts.filter((p) => p.status === 'pending').length}
               </Badge>
             )}
           </TabsTrigger>
@@ -1304,6 +1464,462 @@ export default function AdminDashboard() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* Payouts / Contas de Recebimento Tab */}
+        <TabsContent value="payouts" className="space-y-6">
+          {/* Section 1: Contas de Pagamento dos Profissionais */}
+          <Card>
+            <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-xl">
+                  <Building2 className="h-5 w-5 text-primary" />
+                  Fila de Verificação de Contas Pix / Bancárias
+                </CardTitle>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Validação dos dados de recebimento cadastrados pelos profissionais para liberação
+                  de repasses.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={accountsFilter === 'all' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => {
+                    setAccountsFilter('all')
+                    loadAccounts('all')
+                  }}
+                >
+                  Todas
+                </Button>
+                <Button
+                  variant={accountsFilter === 'pending' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => {
+                    setAccountsFilter('pending')
+                    loadAccounts('pending')
+                  }}
+                >
+                  Pendentes ({accounts.filter((a) => a.status === 'pending').length})
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => loadAccounts(accountsFilter)}
+                  disabled={loadingAccounts}
+                  className="gap-2"
+                >
+                  <RefreshCw className={`h-4 w-4 ${loadingAccounts ? 'animate-spin' : ''}`} />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {loadingAccounts ? (
+                <div className="flex items-center justify-center py-10 text-muted-foreground">
+                  <Loader2 className="h-6 w-6 animate-spin mr-2" /> Carregando contas...
+                </div>
+              ) : accounts.length === 0 ? (
+                <div className="text-center py-8 border border-dashed rounded-lg bg-muted/20">
+                  <Building2 className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-50" />
+                  <p className="font-medium text-foreground">Nenhuma conta encontrada</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Nenhum profissional cadastrou dados de recebimento neste filtro.
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded-md border overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Profissional</TableHead>
+                        <TableHead>Titular / Documento</TableHead>
+                        <TableHead>Chave Pix</TableHead>
+                        <TableHead>Banco / Agência / Conta</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Atualizado em</TableHead>
+                        <TableHead className="text-right">Ação Admin</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {accounts.map((acc) => {
+                        const proUser = acc.expand?.user_id
+                        const formattedDoc =
+                          acc.doc_type === 'cnpj'
+                            ? formatCNPJ(acc.doc_number)
+                            : formatCPF(acc.doc_number)
+                        const formattedKey = acc.pix_key_type
+                          ? formatPixKey(acc.pix_key_type, acc.pix_key || '')
+                          : acc.pix_key || '—'
+
+                        return (
+                          <TableRow key={acc.id}>
+                            <TableCell>
+                              <div className="font-medium text-xs sm:text-sm">
+                                {proUser?.name || 'Profissional'}
+                              </div>
+                              <div className="text-xs text-muted-foreground">{proUser?.email}</div>
+                              {proUser?.phone && (
+                                <div className="text-xs text-muted-foreground font-mono">
+                                  {formatPhoneNumber(proUser.phone)}
+                                </div>
+                              )}
+                            </TableCell>
+
+                            <TableCell>
+                              <div className="font-medium text-xs sm:text-sm">
+                                {acc.holder_name}
+                              </div>
+                              <div className="text-xs text-muted-foreground font-mono">
+                                {acc.doc_type?.toUpperCase()}: {formattedDoc}
+                              </div>
+                            </TableCell>
+
+                            <TableCell>
+                              <div className="text-xs font-semibold uppercase text-slate-500">
+                                {acc.pix_key_type && acc.pix_key_type !== 'none'
+                                  ? `Pix (${acc.pix_key_type})`
+                                  : 'Sem Pix'}
+                              </div>
+                              {acc.pix_key ? (
+                                <div
+                                  className="text-xs font-mono select-all bg-muted/50 p-1 rounded max-w-[220px] truncate"
+                                  title={formattedKey}
+                                >
+                                  {formattedKey}
+                                </div>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
+
+                            <TableCell className="text-xs">
+                              {acc.bank_name ? (
+                                <div>
+                                  <span className="font-medium">{acc.bank_name}</span>
+                                  <div className="text-muted-foreground font-mono text-[11px]">
+                                    Ag: {acc.bank_agency || '—'} / CC: {acc.bank_account || '—'}
+                                  </div>
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground">Não informado</span>
+                              )}
+                            </TableCell>
+
+                            <TableCell>
+                              {acc.status === 'verified' && (
+                                <Badge className="bg-green-100 text-green-800 border-green-300 hover:bg-green-100 text-xs">
+                                  <CheckCircle2 className="h-3 w-3 mr-1 text-green-600" />
+                                  Verificada
+                                </Badge>
+                              )}
+                              {acc.status === 'pending' && (
+                                <Badge className="bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-100 text-xs">
+                                  <Clock className="h-3 w-3 mr-1 text-amber-600" />
+                                  Pendente
+                                </Badge>
+                              )}
+                              {acc.status === 'rejected' && (
+                                <Badge className="bg-red-100 text-red-800 border-red-300 hover:bg-red-100 text-xs">
+                                  <XCircle className="h-3 w-3 mr-1 text-red-600" />
+                                  Rejeitada
+                                </Badge>
+                              )}
+                              {acc.reviewer_note && (
+                                <div
+                                  className="text-[11px] text-red-700 mt-1 max-w-[150px] truncate"
+                                  title={acc.reviewer_note}
+                                >
+                                  Nota: {acc.reviewer_note}
+                                </div>
+                              )}
+                            </TableCell>
+
+                            <TableCell className="text-xs text-muted-foreground whitespace-nowrap">
+                              {new Date(acc.updated || acc.created).toLocaleDateString('pt-BR')}
+                            </TableCell>
+
+                            <TableCell className="text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                {acc.status !== 'verified' && (
+                                  <Button
+                                    size="sm"
+                                    className="bg-green-600 hover:bg-green-700 text-white text-xs h-8 px-2.5"
+                                    onClick={() => {
+                                      setReviewAccountModal({ account: acc, action: 'verified' })
+                                      setReviewerNote('')
+                                    }}
+                                  >
+                                    <Check className="h-3.5 w-3.5 mr-1" /> Aprovar
+                                  </Button>
+                                )}
+                                {acc.status !== 'rejected' && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="text-red-600 border-red-200 hover:bg-red-50 text-xs h-8 px-2.5"
+                                    onClick={() => {
+                                      setReviewAccountModal({ account: acc, action: 'rejected' })
+                                      setReviewerNote('')
+                                    }}
+                                  >
+                                    <X className="h-3.5 w-3.5 mr-1" /> Rejeitar
+                                  </Button>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Section 2: Fila de Repasses (Payouts) */}
+          <Card>
+            <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-xl">
+                  <Banknote className="h-5 w-5 text-green-600" />
+                  Execução de Repasses (Payouts via Pix)
+                </CardTitle>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Valores liberados após o período de garantia retidos para repasse ao profissional.
+                  Confirme o Pix manualmente e registre o status.
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant={payoutsFilter === 'pending' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => {
+                    setPayoutsFilter('pending')
+                    loadPayouts('pending')
+                  }}
+                >
+                  Pendentes
+                </Button>
+                <Button
+                  variant={payoutsFilter === 'paid' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => {
+                    setPayoutsFilter('paid')
+                    loadPayouts('paid')
+                  }}
+                >
+                  Pagos
+                </Button>
+                <Button
+                  variant={payoutsFilter === 'all' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => {
+                    setPayoutsFilter('all')
+                    loadPayouts('all')
+                  }}
+                >
+                  Todos ({payouts.length})
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => loadPayouts(payoutsFilter)}
+                  disabled={loadingPayouts}
+                  className="gap-2"
+                >
+                  <RefreshCw className={`h-4 w-4 ${loadingPayouts ? 'animate-spin' : ''}`} />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {loadingPayouts ? (
+                <div className="flex items-center justify-center py-10 text-muted-foreground">
+                  <Loader2 className="h-6 w-6 animate-spin mr-2" /> Carregando repasses...
+                </div>
+              ) : payouts.length === 0 ? (
+                <div className="text-center py-8 border border-dashed rounded-lg bg-muted/20">
+                  <Coins className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-50" />
+                  <p className="font-medium text-foreground">
+                    Nenhum repasse encontrado neste filtro
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Os repasses são criados automaticamente após a liberação da garantia de 24h.
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded-md border overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Profissional</TableHead>
+                        <TableHead>Chave Pix Cadastrada</TableHead>
+                        <TableHead>Serviço / Job</TableHead>
+                        <TableHead className="text-right">Bruto</TableHead>
+                        <TableHead className="text-right">Taxa</TableHead>
+                        <TableHead className="text-right">Débito</TableHead>
+                        <TableHead className="text-right">Líquido</TableHead>
+                        <TableHead className="text-center">Status</TableHead>
+                        <TableHead className="text-right">Ação Admin</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {payouts.map((p) => {
+                        const proUser = p.expand?.pro_id
+                        const proAcc = accounts.find((a) => a.user_id === p.pro_id)
+                        const jobData = p.expand?.job_id
+                        const serviceName = jobData?.expand?.service_id?.name || 'Serviço'
+
+                        const formattedKey = proAcc?.pix_key_type
+                          ? formatPixKey(proAcc.pix_key_type, proAcc.pix_key || '')
+                          : proAcc?.pix_key || '—'
+
+                        return (
+                          <TableRow key={p.id}>
+                            <TableCell>
+                              <div className="font-medium text-xs sm:text-sm">
+                                {proUser?.name || 'Profissional'}
+                              </div>
+                              <div className="text-xs text-muted-foreground">{proUser?.email}</div>
+                              {proAcc && (
+                                <div className="mt-0.5">
+                                  {proAcc.status === 'verified' ? (
+                                    <Badge
+                                      variant="outline"
+                                      className="text-[10px] text-green-700 bg-green-50 border-green-200"
+                                    >
+                                      Conta Verificada
+                                    </Badge>
+                                  ) : (
+                                    <Badge
+                                      variant="outline"
+                                      className="text-[10px] text-amber-700 bg-amber-50 border-amber-200"
+                                    >
+                                      Conta {proAcc.status}
+                                    </Badge>
+                                  )}
+                                </div>
+                              )}
+                            </TableCell>
+
+                            <TableCell>
+                              {proAcc?.pix_key ? (
+                                <div>
+                                  <div
+                                    className="text-xs font-mono select-all bg-muted/60 p-1 rounded font-medium max-w-[200px] truncate"
+                                    title={formattedKey}
+                                  >
+                                    {formattedKey}
+                                  </div>
+                                  <div className="text-[11px] text-muted-foreground">
+                                    Titular: {proAcc.holder_name}
+                                  </div>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-red-600 font-medium">
+                                  Sem chave Pix cadastrada
+                                </span>
+                              )}
+                            </TableCell>
+
+                            <TableCell>
+                              <div className="font-medium text-xs">{serviceName}</div>
+                              <div className="font-mono text-[11px] text-muted-foreground">
+                                #{p.job_id ? p.job_id.slice(0, 6) : '—'}
+                              </div>
+                            </TableCell>
+
+                            <TableCell className="text-right text-xs">
+                              R${' '}
+                              {Number(p.amount_gross || 0)
+                                .toFixed(2)
+                                .replace('.', ',')}
+                            </TableCell>
+
+                            <TableCell className="text-right text-xs text-muted-foreground">
+                              - R${' '}
+                              {Number(p.platform_fee || 0)
+                                .toFixed(2)
+                                .replace('.', ',')}
+                            </TableCell>
+
+                            <TableCell className="text-right text-xs">
+                              {p.penalty_debit > 0 ? (
+                                <span className="text-red-600 font-medium">
+                                  - R$ {Number(p.penalty_debit).toFixed(2).replace('.', ',')}
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </TableCell>
+
+                            <TableCell className="text-right font-bold text-primary text-sm">
+                              R${' '}
+                              {Number(p.amount_net || 0)
+                                .toFixed(2)
+                                .replace('.', ',')}
+                            </TableCell>
+
+                            <TableCell className="text-center">
+                              {p.status === 'paid' && (
+                                <Badge className="bg-green-100 text-green-800 border-green-300 hover:bg-green-100 text-xs">
+                                  <CheckCircle2 className="h-3 w-3 mr-1" /> Pago
+                                </Badge>
+                              )}
+                              {p.status === 'pending' && (
+                                <Badge className="bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-100 text-xs">
+                                  <Clock className="h-3 w-3 mr-1" /> Pendente
+                                </Badge>
+                              )}
+                              {p.status === 'failed' && (
+                                <Badge className="bg-red-100 text-red-800 border-red-300 hover:bg-red-100 text-xs">
+                                  <XCircle className="h-3 w-3 mr-1" /> Falhou
+                                </Badge>
+                              )}
+                            </TableCell>
+
+                            <TableCell className="text-right">
+                              {p.status === 'pending' ? (
+                                <div className="flex items-center justify-end gap-1.5">
+                                  <Button
+                                    size="sm"
+                                    className="bg-green-600 hover:bg-green-700 text-white text-xs h-8 px-2.5"
+                                    onClick={() => {
+                                      setPayoutActionModal({ payout: p, action: 'paid' })
+                                      setPayoutNotes('Transferência Pix manual confirmada.')
+                                    }}
+                                  >
+                                    <Check className="h-3.5 w-3.5 mr-1" /> Marcar Pago (Pix)
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    className="text-xs h-8 px-2.5"
+                                    onClick={() => {
+                                      setPayoutActionModal({ payout: p, action: 'failed' })
+                                      setPayoutNotes('')
+                                    }}
+                                  >
+                                    <X className="h-3.5 w-3.5 mr-1" /> Falhou
+                                  </Button>
+                                </div>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">
+                                  {p.paid_at
+                                    ? `Pago em ${new Date(p.paid_at).toLocaleDateString('pt-BR')}`
+                                    : p.notes || 'Concluído'}
+                                </span>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
 
       {/* Modal for viewing details of jobs in an alert */}
@@ -1374,6 +1990,191 @@ export default function AdminDashboard() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setSelectedPairJobsModal(null)}>
               Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal for Reviewing Pro Payment Account */}
+      <Dialog
+        open={!!reviewAccountModal}
+        onOpenChange={(open) => !open && setReviewAccountModal(null)}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {reviewAccountModal?.action === 'verified' ? (
+                <>
+                  <CheckCircle2 className="h-5 w-5 text-green-600" />
+                  Aprovar Conta de Recebimento
+                </>
+              ) : (
+                <>
+                  <XCircle className="h-5 w-5 text-red-600" />
+                  Rejeitar Conta de Recebimento
+                </>
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              Titular: {reviewAccountModal?.account.holder_name} (
+              {reviewAccountModal?.account.doc_type?.toUpperCase()}:{' '}
+              {reviewAccountModal?.account.doc_type === 'cnpj'
+                ? formatCNPJ(reviewAccountModal?.account.doc_number || '')
+                : formatCPF(reviewAccountModal?.account.doc_number || '')}
+              )
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="review-note">
+                Observação / Motivo{' '}
+                {reviewAccountModal?.action === 'rejected' && (
+                  <span className="text-red-500">*</span>
+                )}
+              </Label>
+              <Textarea
+                id="review-note"
+                placeholder={
+                  reviewAccountModal?.action === 'verified'
+                    ? 'Opcional: Ex. Documentação conferida e chave Pix testada.'
+                    : 'Informe o motivo da reprovação para que o profissional possa corrigir (ex: CPF do titular diverge da chave Pix informada).'
+                }
+                value={reviewerNote}
+                onChange={(e) => setReviewerNote(e.target.value)}
+                rows={3}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setReviewAccountModal(null)}
+              disabled={reviewingAccount}
+            >
+              Cancelar
+            </Button>
+            <Button
+              className={
+                reviewAccountModal?.action === 'verified'
+                  ? 'bg-green-600 hover:bg-green-700 text-white'
+                  : 'bg-red-600 hover:bg-red-700 text-white'
+              }
+              onClick={handleReviewAccount}
+              disabled={reviewingAccount}
+            >
+              {reviewingAccount ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Processando...
+                </>
+              ) : reviewAccountModal?.action === 'verified' ? (
+                'Confirmar Aprovação'
+              ) : (
+                'Confirmar Reprovação'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal for Executing / Failing Payout */}
+      <Dialog
+        open={!!payoutActionModal}
+        onOpenChange={(open) => !open && setPayoutActionModal(null)}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {payoutActionModal?.action === 'paid' ? (
+                <>
+                  <CheckCircle2 className="h-5 w-5 text-green-600" />
+                  Confirmar Repasse Realizado via Pix
+                </>
+              ) : (
+                <>
+                  <XCircle className="h-5 w-5 text-red-600" />
+                  Marcar Repasse como Falho
+                </>
+              )}
+            </DialogTitle>
+            <DialogDescription>
+              Valor líquido a repassar:{' '}
+              <span className="font-bold text-foreground">
+                R${' '}
+                {Number(payoutActionModal?.payout.amount_net || 0)
+                  .toFixed(2)
+                  .replace('.', ',')}
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {payoutActionModal?.action === 'paid' ? (
+              <div className="p-3 bg-muted/40 rounded-lg border text-xs text-muted-foreground space-y-1">
+                <p>
+                  A transferência do Pix deve ser realizada pelo operador financeiro via internet
+                  banking / aplicativo.
+                </p>
+                <p>
+                  Ao confirmar aqui, o sistema registrará o repasse como <strong>Pago</strong> e
+                  atualizará o extrato do profissional em tempo real.
+                </p>
+              </div>
+            ) : (
+              <div className="p-3 bg-red-50 rounded-lg border border-red-200 text-xs text-red-800 space-y-1">
+                <p className="font-semibold">Atenção:</p>
+                <p>
+                  Marcar o repasse como falho informará o profissional e manterá o valor pendente
+                  para revisão ou correção dos dados.
+                </p>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label htmlFor="payout-note">
+                Observação / Comprovante{' '}
+                {payoutActionModal?.action === 'failed' && <span className="text-red-500">*</span>}
+              </Label>
+              <Input
+                id="payout-note"
+                placeholder={
+                  payoutActionModal?.action === 'paid'
+                    ? 'Ex: ID E2E do Pix ou comprovante bancário'
+                    : 'Ex: Chave Pix inexistente no banco central ou conta bloqueada'
+                }
+                value={payoutNotes}
+                onChange={(e) => setPayoutNotes(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setPayoutActionModal(null)}
+              disabled={processingPayout}
+            >
+              Cancelar
+            </Button>
+            <Button
+              className={
+                payoutActionModal?.action === 'paid'
+                  ? 'bg-green-600 hover:bg-green-700 text-white'
+                  : 'bg-red-600 hover:bg-red-700 text-white'
+              }
+              onClick={handleExecutePayoutAction}
+              disabled={processingPayout}
+            >
+              {processingPayout ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Atualizando...
+                </>
+              ) : payoutActionModal?.action === 'paid' ? (
+                'Confirmar Pagamento'
+              ) : (
+                'Confirmar Falha'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
