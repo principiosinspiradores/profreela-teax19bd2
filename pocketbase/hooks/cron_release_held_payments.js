@@ -37,6 +37,22 @@ cronAdd('release_held_payments', '*/15 * * * *', () => {
     return
   }
 
+  // Helper inline para registrar auditoria em payment_events
+  const logPaymentEvent = function (jId, pIntentId, evType, provStatus, payloadData) {
+    try {
+      const pCol = $app.findCollectionByNameOrId('payment_events')
+      const rec = new Record(pCol)
+      if (jId) rec.set('job_id', jId)
+      if (pIntentId) rec.set('payment_intent_id', pIntentId)
+      rec.set('type', evType)
+      if (provStatus) rec.set('provider_status', provStatus)
+      if (payloadData) rec.set('payload', payloadData)
+      $app.save(rec)
+    } catch (err) {
+      console.log('[release_held_payments] erro ao salvar payment_event:', err)
+    }
+  }
+
   const provider = $os.getenv('PAYMENT_PROVIDER') || ''
   let released = 0
   let failed = 0
@@ -46,11 +62,6 @@ cronAdd('release_held_payments', '*/15 * * * *', () => {
     const jobId = job.getString('id')
     const intentId = job.getString('payment_intent_id')
 
-    // --- capture + release the held payment at the gateway (when configured) -
-    // For Stripe, capturing the pre-authorization finalizes the charge; the
-    // platform-fee split was set at intent creation. For Mercado Pago, the
-    // payment was created with capture:false, so we capture it now. In demo
-    // mode (no provider keys), we just update the local payment_* fields.
     let gatewayOk = true
 
     if (provider === 'stripe' && intentId) {
@@ -78,10 +89,22 @@ cronAdd('release_held_payments', '*/15 * * * *', () => {
         if (res.statusCode < 200 || res.statusCode >= 300) {
           console.log('[release_held_payments] falha Stripe no job', jobId, res.statusCode)
           gatewayOk = false
+          logPaymentEvent(jobId, intentId, 'error', 'stripe_capture_failed', {
+            statusCode: res.statusCode,
+            response: res.json,
+          })
+        } else {
+          logPaymentEvent(jobId, intentId, 'capture', 'succeeded', {
+            provider: 'stripe',
+            source: 'cron_release_held_payments',
+          })
         }
       } catch (err) {
         console.log('[release_held_payments] exceção Stripe no job', jobId, err)
         gatewayOk = false
+        logPaymentEvent(jobId, intentId, 'error', 'stripe_exception', {
+          error: String(err),
+        })
       }
     } else if (provider === 'mercadopago' && intentId) {
       const accessToken = $os.getenv('MERCADOPAGO_ACCESS_TOKEN') || ''
@@ -90,23 +113,105 @@ cronAdd('release_held_payments', '*/15 * * * *', () => {
         failed++
         continue
       }
+
+      // CORREÇÃO: Antes de capturar, fazer GET /v1/payments/{intentId}
+      // Se status='approved' -> já capturado: pular a chamada de captura e seguir o fluxo normal
+      // Se status='authorized' -> fazer o PUT {capture:true}
+      // Se erro de rede/5xx -> retornar erro e NÃO alterar status do job (tenta no próximo ciclo)
+      let getRes = null
       try {
-        const res = $http.send({
+        getRes = $http.send({
           url: 'https://api.mercadopago.com/v1/payments/' + encodeURIComponent(intentId),
-          method: 'PUT',
+          method: 'GET',
           headers: {
             Authorization: 'Bearer ' + accessToken,
-            'Content-Type': 'application/json',
           },
-          body: JSON.stringify({ capture: true }),
           timeout: 20,
         })
-        if (res.statusCode < 200 || res.statusCode >= 300) {
-          console.log('[release_held_payments] falha Mercado Pago no job', jobId, res.statusCode)
+      } catch (netErr) {
+        console.log('[release_held_payments] erro de rede Mercado Pago no job', jobId, netErr)
+        logPaymentEvent(jobId, intentId, 'error', 'network_error', {
+          source: 'cron_release_held_payments',
+          error: String(netErr),
+        })
+        failed++
+        continue
+      }
+
+      if (!getRes || getRes.statusCode < 200 || getRes.statusCode >= 300) {
+        console.log(
+          '[release_held_payments] falha ao consultar status MP no job',
+          jobId,
+          getRes ? getRes.statusCode : 0,
+        )
+        logPaymentEvent(jobId, intentId, 'error', 'get_failed', {
+          source: 'cron_release_held_payments',
+          statusCode: getRes ? getRes.statusCode : 0,
+          response: getRes ? getRes.json : null,
+        })
+        failed++
+        continue
+      }
+
+      const mpData = getRes.json || {}
+      const curMpStatus = mpData.status || ''
+
+      if (curMpStatus === 'approved') {
+        // Já capturado na criação (capture: true) - pular chamada PUT e seguir liberação
+        logPaymentEvent(jobId, intentId, 'capture', 'approved', {
+          source: 'cron_release_held_payments',
+          note: 'Pagamento já approved/capturado no MP. Chamada PUT de captura ignorada com sucesso.',
+        })
+      } else if (curMpStatus === 'authorized') {
+        // Fazer captura
+        try {
+          const putRes = $http.send({
+            url: 'https://api.mercadopago.com/v1/payments/' + encodeURIComponent(intentId),
+            method: 'PUT',
+            headers: {
+              Authorization: 'Bearer ' + accessToken,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ capture: true }),
+            timeout: 20,
+          })
+          if (putRes.statusCode < 200 || putRes.statusCode >= 300) {
+            console.log(
+              '[release_held_payments] falha na captura PUT Mercado Pago no job',
+              jobId,
+              putRes.statusCode,
+            )
+            logPaymentEvent(jobId, intentId, 'error', 'put_capture_failed', {
+              source: 'cron_release_held_payments',
+              statusCode: putRes.statusCode,
+              response: putRes.json,
+            })
+            gatewayOk = false
+          } else {
+            logPaymentEvent(jobId, intentId, 'capture', 'approved', {
+              source: 'cron_release_held_payments',
+              action: 'captured_from_authorized',
+            })
+          }
+        } catch (err) {
+          console.log('[release_held_payments] exceção captura PUT Mercado Pago no job', jobId, err)
           gatewayOk = false
+          logPaymentEvent(jobId, intentId, 'error', 'put_exception', {
+            source: 'cron_release_held_payments',
+            error: String(err),
+          })
         }
-      } catch (err) {
-        console.log('[release_held_payments] exceção Mercado Pago no job', jobId, err)
+      } else {
+        console.log(
+          '[release_held_payments] status inesperado no MP para liberação:',
+          jobId,
+          curMpStatus,
+        )
+        logPaymentEvent(jobId, intentId, 'error', curMpStatus, {
+          source: 'cron_release_held_payments',
+          note: 'Status inesperado no MP antes da liberação',
+          response: mpData,
+        })
         gatewayOk = false
       }
     }
@@ -154,10 +259,6 @@ cronAdd('release_held_payments', '*/15 * * * *', () => {
         }
 
         // --- debit outstanding penalty_balance from this payout ------------
-        // Entrega 2: when a pro has an outstanding debtor balance (from a
-        // delay-driven cancel+reopen), collect it from the released payout:
-        // debit = min(penalty_balance, payout). The pro's penalty_balance is
-        // reduced and a debit transaction notification is recorded.
         let penaltyDebitApplied = 0
         try {
           const proRec = $app.findFirstRecordByData('users', 'id', proId)
