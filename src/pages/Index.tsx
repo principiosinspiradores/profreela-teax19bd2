@@ -23,10 +23,10 @@ export default function Index() {
         <div className="container relative z-10">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div className="max-w-2xl animate-fade-in-up">
-              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#D4A017]/15 text-[#B3840E] dark:text-[#E5B429] font-medium text-sm mb-6 border border-[#D4A017]/30">
+              <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#0D4F5C] text-[#E5B429] font-medium text-sm mb-6 border border-[#0D4F5C]">
                 <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#D4A017] opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-[#D4A017]"></span>
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#E5B429] opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-[#E5B429]"></span>
                 </span>
                 ProFreela &bull; profreela.com.br
               </div>
