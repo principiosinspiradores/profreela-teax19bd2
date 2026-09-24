@@ -39,9 +39,9 @@ export default function Index() {
                 </span>
               </h1>
               <p className="text-lg md:text-xl text-muted-foreground mb-8 leading-relaxed">
-                Profissionais de limpeza e manutenção para o seu hotel ou empresa — em minutos.
-                ProFreela conecta você a faxineiras, camareiras e ajudantes verificados, com
-                pagamento seguro pela plataforma. Agendado ou emergencial, sem burocracia.
+                Profissionais para o seu hotel ou empresa em minutos. ProFreela conecta você a
+                faxineiras, camareiras, ajudantes e outros profissionais verificados, com pagamento
+                seguro pela plataforma. Agendado ou emergencial, sem burocracia.
               </p>
 
               <div className="flex flex-col sm:flex-row gap-4">
