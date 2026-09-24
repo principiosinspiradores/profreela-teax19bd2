@@ -31,16 +31,16 @@ export default function Index() {
                 ProFreela &bull; profreela.com.br
               </div>
               <h1 className="text-4xl md:text-6xl font-bold tracking-tight text-slate-900 dark:text-white mb-6 leading-tight">
-                A inteligência operacional para o seu negócio com a{' '}
+                Faltou funcionário? Temos o profissional certo em{' '}
                 <span className="inline-block">
-                  <span className="text-[#0D4F5C] dark:text-[#146C7E]">Pro</span>
-                  <span className="text-[#D4A017]">Freela</span>
+                  <span className="text-[#0D4F5C] dark:text-[#146C7E]">minutos</span>
+                  <span className="text-[#D4A017]">.</span>
                 </span>
-                .
               </h1>
               <p className="text-lg md:text-xl text-muted-foreground mb-8 leading-relaxed">
-                A solução sob demanda tipo Uber para hotéis, eventos e empresas. Contrate
-                faxineiras, camareiras e ajudantes em minutos, com segurança e preço justo.
+                Profissionais de limpeza e manutenção para o seu hotel ou empresa — em minutos.
+                ProFreela conecta você a faxineiras, camareiras e ajudantes verificados, com
+                pagamento seguro pela plataforma. Agendado ou emergencial, sem burocracia.
               </p>
 
               <div className="flex flex-col sm:flex-row gap-4">
