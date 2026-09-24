@@ -134,6 +134,9 @@ export const declineJob = async (jobId: string, proId: string) => {
   }
 }
 
+export const getActivePros = () =>
+  pb.collection('users').getFullList({ filter: 'role="pro" && status="active"' })
+
 export const getNearbyPros = async () => {
   const list = await pb.collection('users').getFullList({ filter: `role="pro" && status="active"` })
   // Suspended professionals must not appear in searches/client discovery.

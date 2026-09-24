@@ -1,14 +1,7 @@
-import { useState, useEffect } from 'react'
-import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from 'recharts'
+import { useState, useEffect, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import {
-  ChartConfig,
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-} from '@/components/ui/chart'
 import {
   Users,
   Activity,
@@ -33,6 +26,8 @@ import {
   XCircle,
   Coins,
   Building2,
+  Briefcase,
+  PlayCircle,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -68,6 +63,7 @@ import {
   getProsWithPenalty,
   getPenaltyJobs,
   getProForModeration,
+  getActivePros,
   forgivePenalty,
   type AntiDisintermediationAlert,
   type ChatDisintermediationAlert,
@@ -92,27 +88,20 @@ import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
 import { useAuth } from '@/hooks/use-auth'
 
-const demandData = [
-  { time: '06:00', demand: 40, supply: 60 },
-  { time: '09:00', demand: 120, supply: 80 },
-  { time: '12:00', demand: 90, supply: 95 },
-  { time: '15:00', demand: 150, supply: 70 },
-  { time: '18:00', demand: 80, supply: 100 },
-]
-
-const chartConfig = {
-  demand: { label: 'Demanda (Pedidos)', color: 'hsl(var(--chart-1))' },
-  supply: { label: 'Oferta (Profissionais)', color: 'hsl(var(--chart-2))' },
-} satisfies ChartConfig
-
 export default function AdminDashboard() {
   const [logs, setLogs] = useState<any[]>([])
   const [documents, setDocuments] = useState<any[]>([])
+  const [loadingDocs, setLoadingDocs] = useState(false)
+  const [docsError, setDocsError] = useState(false)
+  const [activePros, setActivePros] = useState<any[]>([])
+  const [loadingPros, setLoadingPros] = useState(false)
+  const [prosError, setProsError] = useState(false)
   const [alerts, setAlerts] = useState<AntiDisintermediationAlert[]>([])
   const [chatAlerts, setChatAlerts] = useState<ChatDisintermediationAlert[]>([])
   const [loadingAlerts, setLoadingAlerts] = useState(false)
   const [jobs, setJobs] = useState<any[]>([])
   const [loadingJobs, setLoadingJobs] = useState(false)
+  const [jobsError, setJobsError] = useState(false)
   const [unlockingJobId, setUnlockingJobId] = useState<string | null>(null)
   const [selectedPairJobsModal, setSelectedPairJobsModal] = useState<{
     clientName: string
@@ -161,8 +150,31 @@ export default function AdminDashboard() {
   const { toast } = useToast()
 
   const loadDocs = async () => {
-    const docs = await getDocuments()
-    setDocuments(docs)
+    setLoadingDocs(true)
+    setDocsError(false)
+    try {
+      const docs = await getDocuments()
+      setDocuments(docs)
+    } catch (err) {
+      console.error('Failed to load documents', err)
+      setDocsError(true)
+    } finally {
+      setLoadingDocs(false)
+    }
+  }
+
+  const loadActivePros = async () => {
+    setLoadingPros(true)
+    setProsError(false)
+    try {
+      const pros = await getActivePros()
+      setActivePros(pros)
+    } catch (err) {
+      console.error('Failed to load active pros', err)
+      setProsError(true)
+    } finally {
+      setLoadingPros(false)
+    }
   }
 
   const loadAlerts = async () => {
@@ -187,11 +199,13 @@ export default function AdminDashboard() {
 
   const loadAllJobs = async () => {
     setLoadingJobs(true)
+    setJobsError(false)
     try {
       const jList = await getJobs()
       setJobs(jList)
     } catch (err) {
       console.error('Failed to load jobs', err)
+      setJobsError(true)
     } finally {
       setLoadingJobs(false)
     }
@@ -387,6 +401,7 @@ export default function AdminDashboard() {
   useEffect(() => {
     getModerationLogs().then(setLogs)
     loadDocs()
+    loadActivePros()
     loadAlerts()
     loadAllJobs()
     loadPenalties()
@@ -396,6 +411,10 @@ export default function AdminDashboard() {
   }, [])
 
   useRealtime('documents', loadDocs)
+  useRealtime('users', () => {
+    loadActivePros()
+    loadModerationPro()
+  })
   useRealtime('jobs', () => {
     loadAlerts()
     loadAllJobs()
@@ -477,10 +496,60 @@ export default function AdminDashboard() {
         description: approved ? 'Documento aprovado e usuário ativo.' : 'Documento rejeitado.',
       })
       loadDocs()
+      loadActivePros()
     } catch (err) {
       toast({ title: 'Erro', variant: 'destructive' })
     }
   }
+
+  // Real calculations for overview cards and status breakdown
+  const currencyFormatter = useMemo(
+    () =>
+      new Intl.NumberFormat('pt-BR', {
+        style: 'currency',
+        currency: 'BRL',
+      }),
+    [],
+  )
+
+  const gmvToday = useMemo(() => {
+    const today = new Date()
+    const isSameDay = (d: Date) =>
+      d.getFullYear() === today.getFullYear() &&
+      d.getMonth() === today.getMonth() &&
+      d.getDate() === today.getDate()
+
+    return jobs
+      .filter((j) => {
+        if (j.status !== 'completed' || !j.completed_at) return false
+        const compDate = new Date(j.completed_at)
+        return !isNaN(compDate.getTime()) && isSameDay(compDate)
+      })
+      .reduce((acc, j) => {
+        const val = Number(j.client_price ?? j.price) || 0
+        return acc + val
+      }, 0)
+  }, [jobs])
+
+  const activeJobsCount = useMemo(() => {
+    return jobs.filter((j) => j.status === 'accepted' || j.status === 'in_progress').length
+  }, [jobs])
+
+  const jobsByStatus = useMemo(() => {
+    const counts = {
+      pending: 0,
+      accepted: 0,
+      in_progress: 0,
+      completed: 0,
+      cancelled: 0,
+    }
+    for (const j of jobs) {
+      if (j.status in counts) {
+        counts[j.status as keyof typeof counts] += 1
+      }
+    }
+    return counts
+  }, [jobs])
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto w-full">
@@ -488,9 +557,6 @@ export default function AdminDashboard() {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Painel de Controle</h1>
           <p className="text-muted-foreground">Gestão global da plataforma ProFreela.</p>
-        </div>
-        <div className="bg-accent/10 text-accent px-4 py-2 rounded-lg font-medium flex items-center gap-2 border border-accent/20">
-          <AlertTriangle className="h-5 w-5" /> Região Central com alta demanda!
         </div>
       </div>
 
@@ -546,16 +612,32 @@ export default function AdminDashboard() {
                 <DollarSign className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">R$ 14.500</div>
+                {loadingJobs ? (
+                  <div className="flex items-center gap-2 text-muted-foreground text-sm py-1">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Carregando...
+                  </div>
+                ) : jobsError ? (
+                  <div className="text-2xl font-bold text-muted-foreground">—</div>
+                ) : (
+                  <div className="text-2xl font-bold">{currencyFormatter.format(gmvToday)}</div>
+                )}
               </CardContent>
             </Card>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-sm font-medium">Profissionais Online</CardTitle>
+                <CardTitle className="text-sm font-medium">Pros Ativos</CardTitle>
                 <Users className="h-4 w-4 text-secondary" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-secondary">243</div>
+                {loadingPros ? (
+                  <div className="flex items-center gap-2 text-muted-foreground text-sm py-1">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Carregando...
+                  </div>
+                ) : prosError ? (
+                  <div className="text-2xl font-bold text-muted-foreground">—</div>
+                ) : (
+                  <div className="text-2xl font-bold text-secondary">{activePros.length}</div>
+                )}
               </CardContent>
             </Card>
             <Card>
@@ -564,7 +646,15 @@ export default function AdminDashboard() {
                 <Activity className="h-4 w-4 text-primary" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-primary">89</div>
+                {loadingJobs ? (
+                  <div className="flex items-center gap-2 text-muted-foreground text-sm py-1">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Carregando...
+                  </div>
+                ) : jobsError ? (
+                  <div className="text-2xl font-bold text-muted-foreground">—</div>
+                ) : (
+                  <div className="text-2xl font-bold text-primary">{activeJobsCount}</div>
+                )}
               </CardContent>
             </Card>
             <Card>
@@ -573,41 +663,110 @@ export default function AdminDashboard() {
                 <FileCheck className="h-4 w-4 text-accent" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-accent">
-                  {documents.filter((d) => d.status === 'pending').length}
-                </div>
+                {loadingDocs ? (
+                  <div className="flex items-center gap-2 text-muted-foreground text-sm py-1">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Carregando...
+                  </div>
+                ) : docsError ? (
+                  <div className="text-2xl font-bold text-muted-foreground">—</div>
+                ) : (
+                  <div className="text-2xl font-bold text-accent">
+                    {documents.filter((d) => d.status === 'pending').length}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
             <Card className="lg:col-span-4">
-              <CardHeader>
-                <CardTitle>Demanda x Oferta (Tempo Real)</CardTitle>
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <Briefcase className="h-5 w-5 text-primary" />
+                  Resumo de Serviços
+                </CardTitle>
+                <p className="text-xs text-muted-foreground">
+                  Distribuição em tempo real dos serviços cadastrados na plataforma.
+                </p>
               </CardHeader>
               <CardContent>
-                <ChartContainer config={chartConfig} className="h-[300px] w-full">
-                  <AreaChart data={demandData} margin={{ left: 0, right: 0, top: 0, bottom: 0 }}>
-                    <CartesianGrid vertical={false} />
-                    <XAxis dataKey="time" tickLine={false} axisLine={false} tickMargin={8} />
-                    <YAxis tickLine={false} axisLine={false} tickMargin={8} />
-                    <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
-                    <Area
-                      type="monotone"
-                      dataKey="demand"
-                      stroke="var(--color-demand)"
-                      fill="var(--color-demand)"
-                      fillOpacity={0.2}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="supply"
-                      stroke="var(--color-supply)"
-                      fill="var(--color-supply)"
-                      fillOpacity={0.2}
-                    />
-                  </AreaChart>
-                </ChartContainer>
+                {loadingJobs ? (
+                  <div className="flex items-center justify-center py-12 text-muted-foreground">
+                    <Loader2 className="h-6 w-6 animate-spin mr-2" /> Carregando dados reais dos
+                    serviços...
+                  </div>
+                ) : jobsError ? (
+                  <div className="text-center py-8 text-muted-foreground text-sm">
+                    Não foi possível carregar o resumo de serviços no momento.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/20">
+                      <div className="flex items-center gap-2.5">
+                        <Clock className="h-4 w-4 text-amber-500" />
+                        <span className="text-sm font-medium">Pendentes</span>
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className="font-mono text-xs font-semibold px-2.5 py-0.5"
+                      >
+                        {jobsByStatus.pending}
+                      </Badge>
+                    </div>
+
+                    <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/20">
+                      <div className="flex items-center gap-2.5">
+                        <CheckCircle2 className="h-4 w-4 text-blue-500" />
+                        <span className="text-sm font-medium">Aceitos</span>
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className="font-mono text-xs font-semibold px-2.5 py-0.5 border-blue-200 text-blue-700 bg-blue-50/50"
+                      >
+                        {jobsByStatus.accepted}
+                      </Badge>
+                    </div>
+
+                    <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/20">
+                      <div className="flex items-center gap-2.5">
+                        <PlayCircle className="h-4 w-4 text-indigo-500" />
+                        <span className="text-sm font-medium">Em Andamento</span>
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className="font-mono text-xs font-semibold px-2.5 py-0.5 border-indigo-200 text-indigo-700 bg-indigo-50/50"
+                      >
+                        {jobsByStatus.in_progress}
+                      </Badge>
+                    </div>
+
+                    <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/20">
+                      <div className="flex items-center gap-2.5">
+                        <Check className="h-4 w-4 text-green-600" />
+                        <span className="text-sm font-medium">Concluídos</span>
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className="font-mono text-xs font-semibold px-2.5 py-0.5 border-green-200 text-green-700 bg-green-50/50"
+                      >
+                        {jobsByStatus.completed}
+                      </Badge>
+                    </div>
+
+                    <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/20">
+                      <div className="flex items-center gap-2.5">
+                        <XCircle className="h-4 w-4 text-red-500" />
+                        <span className="text-sm font-medium">Cancelados</span>
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className="font-mono text-xs font-semibold px-2.5 py-0.5 border-red-200 text-red-700 bg-red-50/50"
+                      >
+                        {jobsByStatus.cancelled}
+                      </Badge>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -616,7 +775,7 @@ export default function AdminDashboard() {
                 <CardTitle>Moderação de Profissionais</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex items-center justify-between border-b pb-4">
+                <div className="flex items-center justify-between pb-2">
                   {moderationPro ? (
                     <>
                       <div className="flex items-center gap-3">
@@ -650,25 +809,11 @@ export default function AdminDashboard() {
                       </div>
                     </>
                   ) : (
-                    <div className="flex items-center gap-3 text-muted-foreground py-2">
+                    <div className="flex items-center gap-3 text-muted-foreground py-6">
                       <Users className="h-5 w-5" />
                       <p className="text-sm">Nenhum profissional cadastrado para moderação</p>
                     </div>
                   )}
-                </div>
-
-                <div className="mt-4">
-                  <h4 className="text-sm font-bold mb-2">Heatmap Simulado (Google Maps)</h4>
-                  <div className="h-32 bg-muted rounded-xl relative overflow-hidden border">
-                    <img
-                      src="https://img.usecurling.com/p/400/200?q=heatmap"
-                      className="w-full h-full object-cover opacity-70 mix-blend-multiply"
-                      alt="Heatmap"
-                    />
-                    <div className="absolute top-2 left-2 bg-black/50 text-white text-xs px-2 py-1 rounded">
-                      Campinas (Alta Demanda)
-                    </div>
-                  </div>
                 </div>
               </CardContent>
             </Card>
