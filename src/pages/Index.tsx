@@ -31,7 +31,8 @@ export default function Index() {
                 ProFreela &bull; profreela.com.br
               </div>
               <h1 className="text-4xl md:text-6xl font-bold tracking-tight text-slate-900 dark:text-white mb-6 leading-tight">
-                Faltou funcionário? Temos o profissional certo em{' '}
+                <span className="text-[#D4A017] dark:text-[#E5B429]">Faltou funcionário?</span>{' '}
+                Temos o profissional certo em{' '}
                 <span className="inline-block">
                   <span className="text-[#0D4F5C] dark:text-[#146C7E]">minutos</span>
                   <span className="text-[#D4A017]">.</span>
