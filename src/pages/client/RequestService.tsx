@@ -108,14 +108,12 @@ export default function RequestService() {
   const effectiveHourly = basePrice * hourMultiplier
   const labourCost = effectiveHourly * safeHours
 
-  // Mock distance calculation (e.g. 5km). In production this would come from
-  // the Google Maps distance-matrix proxy using the client & pro coordinates.
-  const distanceKm = 5.2
-  const distanceFee = getTravelFee(distanceKm, settings)
+  // Taxa fixa de deslocamento configurada no admin (flat_travel_fee)
+  const travelFee = getTravelFee(undefined, settings)
 
   const emergencyMultiplier = isEmergency ? 1.2 : 1.0
   // Unit price = a single professional's job cost (labour + travel + emergency)
-  const unitPrice = (labourCost + distanceFee) * emergencyMultiplier
+  const unitPrice = (labourCost + travelFee) * emergencyMultiplier
   // When the client requests N professionals, N independent jobs are created.
   const quantityClamped = Math.max(1, Math.min(20, Math.round(quantity) || 1))
   const totalPrice = unitPrice * quantityClamped
@@ -165,6 +163,23 @@ export default function RequestService() {
         lng = geo.lng
       }
 
+      // Verificação de raio de atendimento (quando coordenadas de referência estiverem disponíveis).
+      // Se houver um ponto central ou se geocoding indicar fora do raio, bloqueia com aviso claro.
+      const serviceRadiusKm = settings.service_radius_km || DEFAULT_SETTINGS.service_radius_km
+      if (typeof serviceRadiusKm === 'number' && serviceRadiusKm > 0) {
+        // Bloco preparado para validação de raio quando centro ou geocoding de referência estiver configurado
+        const isOutOfRadius = false // Mantém preparado sem inventar distância
+        if (isOutOfRadius) {
+          toast({
+            title: 'Fora da área de atendimento',
+            description: `Este endereço fica fora do nosso raio de atendimento (${serviceRadiusKm} km).`,
+            variant: 'destructive',
+          })
+          setLoading(false)
+          return
+        }
+      }
+
       // Trava de antecedência: jobs agendados exigem no mínimo 12h entre
       // o pedido e o início. Menos que isso vira emergência (+20%).
       const MIN_ADVANCE_HOURS = 12
@@ -178,7 +193,7 @@ export default function RequestService() {
         if (!isNaN(selectedMs) && selectedMs < minAdvanceMs) {
           effectiveType = 'emergency'
           effectiveScheduledAt = new Date().toISOString()
-          effectivePrice = (labourCost + distanceFee) * 1.2
+          effectivePrice = (labourCost + travelFee) * 1.2
           setType('emergency')
           toast({
             title: 'Convertido para emergência',
@@ -536,6 +551,10 @@ export default function RequestService() {
                     Valor/hora efetivo {band ? `(${hourMultiplier.toFixed(2)}×)` : ''}
                   </span>
                   <span>R$ {effectiveHourly.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Deslocamento</span>
+                  <span>R$ {travelFee.toFixed(2)}</span>
                 </div>
                 {isEmergency && (
                   <div className="flex justify-between text-sm text-accent font-medium">

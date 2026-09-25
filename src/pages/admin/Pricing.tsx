@@ -122,6 +122,8 @@ export default function AdminPricing() {
         normal_hours_threshold: settings.normal_hours_threshold,
         distance_price_per_km: settings.distance_price_per_km,
         min_distance_fee: settings.min_distance_fee,
+        flat_travel_fee: settings.flat_travel_fee,
+        service_radius_km: settings.service_radius_km,
       })
       setSettings(updated)
       toast({
@@ -413,38 +415,39 @@ export default function AdminPricing() {
             <MapPin className="h-5 w-5 text-primary" /> Custo de Deslocamento
           </CardTitle>
           <CardDescription>
-            Configure o valor cobrado para cobrir o deslocamento do profissional até o local do
-            serviço. A taxa mínima garante um piso mesmo para distâncias curtas.
+            Configure a taxa fixa de deslocamento aplicada às solicitações e o raio máximo de
+            atendimento.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="distance_price_per_km">Preço por km (R$)</Label>
+              <Label htmlFor="flat_travel_fee">Taxa fixa de deslocamento (R$)</Label>
               <Input
-                id="distance_price_per_km"
+                id="flat_travel_fee"
                 type="number"
                 step="0.01"
                 min="0"
-                value={settings.distance_price_per_km}
-                onChange={(e) => handleNumberChange('distance_price_per_km', e.target.value)}
+                value={settings.flat_travel_fee}
+                onChange={(e) => handleNumberChange('flat_travel_fee', e.target.value)}
               />
               <p className="text-xs text-muted-foreground">
-                Valor cobrado por quilômetro percorrido pelo profissional. Padrão: R$ 2,50/km.
+                Valor fixo cobrado pelo deslocamento em todas as solicitações dentro do raio.
+                Padrão: R$ 10,00.
               </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="min_distance_fee">Taxa mínima de deslocamento (R$)</Label>
+              <Label htmlFor="service_radius_km">Raio de atendimento (km)</Label>
               <Input
-                id="min_distance_fee"
+                id="service_radius_km"
                 type="number"
-                step="0.01"
-                min="0"
-                value={settings.min_distance_fee}
-                onChange={(e) => handleNumberChange('min_distance_fee', e.target.value)}
+                step="1"
+                min="1"
+                value={settings.service_radius_km}
+                onChange={(e) => handleNumberChange('service_radius_km', e.target.value)}
               />
               <p className="text-xs text-muted-foreground">
-                Valor mínimo cobrado mesmo para distâncias curtas. Padrão: R$ 8,00.
+                Distância máxima em km a partir do centro de atendimento. Padrão: 15 km.
               </p>
             </div>
           </div>

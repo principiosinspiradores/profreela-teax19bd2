@@ -33,6 +33,10 @@ routerAdd(
       'short_job_multiplier_4_5',
       'short_job_multiplier_6_7',
       'normal_hours_threshold',
+      'distance_price_per_km',
+      'min_distance_fee',
+      'flat_travel_fee',
+      'service_radius_km',
     ]
 
     let record = null
@@ -91,6 +95,8 @@ routerAdd(
         normal_hours_threshold: record.getFloat('normal_hours_threshold') || 8,
         distance_price_per_km: record.getFloat('distance_price_per_km') || 2.5,
         min_distance_fee: record.getFloat('min_distance_fee') || 8,
+        flat_travel_fee: record.getFloat('flat_travel_fee') || 10,
+        service_radius_km: record.getFloat('service_radius_km') || 15,
         updated: record.getString('updated'),
       },
       updated: true,

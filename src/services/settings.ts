@@ -32,10 +32,14 @@ export interface PlatformSettings {
   short_job_multiplier_6_7: number
   normal_hours_threshold: number
   // --- Travel / displacement fee ------------------------------------------
-  /** Price charged per km travelled by the professional (R$/km). */
-  distance_price_per_km: number
-  /** Minimum displacement fee charged even for short distances (R$). */
-  min_distance_fee: number
+  /** Price charged per km travelled by the professional (R$/km) (legacy). */
+  distance_price_per_km?: number
+  /** Minimum displacement fee charged even for short distances (R$) (legacy). */
+  min_distance_fee?: number
+  /** Fixed travel fee charged for requests within the coverage radius (R$). */
+  flat_travel_fee: number
+  /** Service coverage radius in km. */
+  service_radius_km: number
   updated?: string
 }
 
@@ -58,6 +62,8 @@ const DEFAULT_SETTINGS: PlatformSettings = {
   normal_hours_threshold: 8,
   distance_price_per_km: 2.5,
   min_distance_fee: 8,
+  flat_travel_fee: 10,
+  service_radius_km: 15,
 }
 
 /** Fetch the current platform settings (public). Falls back to defaults. */

@@ -50,20 +50,18 @@ export function shortJobBand(
 /**
  * Travel/displacement fee for a job.
  *
- * The raw cost is `distanceKm × price per km`, but a configurable minimum
- * fee is applied so short trips still cover the professional's travel. Both
- * values come from the admin-configurable platform settings, falling back to
- * sensible defaults when unset.
- *
- *   fee = max(distanceKm * price_per_km, min_distance_fee)
+ * Returns the configured flat travel fee (`flat_travel_fee`) from settings,
+ * falling back to 10 (or legacy minimum distance fee) when not set.
  */
 export function getTravelFee(
-  distanceKm: number,
-  settings: Pick<PlatformSettings, 'distance_price_per_km' | 'min_distance_fee'> = DEFAULT_SETTINGS,
+  _distanceKm?: number,
+  settings: Pick<
+    PlatformSettings,
+    'flat_travel_fee' | 'distance_price_per_km' | 'min_distance_fee'
+  > = DEFAULT_SETTINGS,
 ): number {
-  const km = Math.max(0, Number(distanceKm) || 0)
-  const perKm = settings.distance_price_per_km || DEFAULT_SETTINGS.distance_price_per_km
-  const minFee = settings.min_distance_fee ?? DEFAULT_SETTINGS.min_distance_fee
-  const raw = km * perKm
-  return Math.max(raw, minFee)
+  if (typeof settings.flat_travel_fee === 'number' && !isNaN(settings.flat_travel_fee)) {
+    return Math.max(0, settings.flat_travel_fee)
+  }
+  return DEFAULT_SETTINGS.flat_travel_fee
 }

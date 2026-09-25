@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-25T00:16:33.716Z",
+  "generatedAt": "2026-09-25T00:41:46.130Z",
   "collections": [
     {
       "name": "users",
@@ -1028,6 +1028,18 @@
         },
         {
           "name": "min_distance_fee",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "flat_travel_fee",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "service_radius_km",
           "type": "number",
           "required": false,
           "system": false
