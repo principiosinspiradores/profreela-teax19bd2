@@ -43,11 +43,18 @@ routerAdd(
       return e.json(400, { ok: false, error: 'Endereço é obrigatório.' })
     }
 
-    const apiKey = $os.getenv('GOOGLE_MAPS_API_KEY') || ''
-    // Log the prefix (first 5 chars) so we can confirm the env var is actually
-    // populated at runtime — without leaking the full key into the logs.
+    // Read GOOGLE_MAPS_SERVER_GEO_KEY first (server-side unrestricted key dedicated to Geocoding API).
+    // Fall back to GOOGLE_MAPS_API_KEY if not configured.
+    const serverGeoKey = $os.getenv('GOOGLE_MAPS_SERVER_GEO_KEY') || ''
+    const fallbackKey = $os.getenv('GOOGLE_MAPS_API_KEY') || ''
+    const apiKey = serverGeoKey || fallbackKey
+
     console.log(
-      '[maps_proxy/geocode] GOOGLE_MAPS_API_KEY prefix:',
+      '[maps_proxy/geocode] GOOGLE_MAPS_SERVER_GEO_KEY prefix:',
+      serverGeoKey ? serverGeoKey.substring(0, 5) + '...' : '(empty)',
+      '| usingKeySource:',
+      serverGeoKey ? 'GOOGLE_MAPS_SERVER_GEO_KEY' : fallbackKey ? 'GOOGLE_MAPS_API_KEY' : 'none',
+      '| keyPrefix:',
       apiKey ? apiKey.substring(0, 5) + '...' : '(empty)',
     )
     if (!apiKey) {
