@@ -172,12 +172,20 @@ export function Checkout({
     )
   }
 
+  const isRealGateway =
+    (config?.provider === 'mercadopago' && !!config.publicKey) ||
+    (config?.provider === 'stripe' && !!config.publicKey)
+
+  const isDemoAllowed = !isRealGateway && (config?.demoEnabled || settings?.payments_demo_enabled)
+
   const providerLabel =
-    config?.provider === 'stripe'
+    config?.provider === 'stripe' && config?.publicKey
       ? 'Stripe'
-      : config?.provider === 'mercadopago'
+      : config?.provider === 'mercadopago' && config?.publicKey
         ? 'Mercado Pago'
-        : 'Modo demo'
+        : isDemoAllowed
+          ? 'Modo demo'
+          : 'Indisponível'
 
   const guaranteeDays = settings?.guarantee_period_days ?? 1
 
@@ -270,8 +278,8 @@ export function Checkout({
               />
             </div>
           </div>
-        ) : (
-          /* Demo mode / Gateway sem credenciais */
+        ) : isDemoAllowed ? (
+          /* Demo mode / Gateway sem credenciais com flag explicitamente ligada */
           <div className="space-y-4">
             {/* Demo notice badge / banner */}
             <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950 flex gap-2 items-start">
@@ -338,6 +346,22 @@ export function Checkout({
                 </>
               )}
             </Button>
+          </div>
+        ) : (
+          /* Produção / Sem credenciais e demo desligado: bloquear com estado de erro claro */
+          <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-center space-y-3">
+            <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+            </div>
+            <div className="space-y-1">
+              <h4 className="font-semibold text-sm text-foreground">
+                Pagamento temporariamente indisponível
+              </h4>
+              <p className="text-xs text-muted-foreground">
+                O processador de pagamentos está em manutenção ou aguardando credenciais. Tente
+                novamente em instantes.
+              </p>
+            </div>
           </div>
         )}
 

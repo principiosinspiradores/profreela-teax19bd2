@@ -15,7 +15,12 @@ import {
   Trash2,
   Hourglass,
   MapPin,
+  Search,
+  AlertCircle,
+  CreditCard,
 } from 'lucide-react'
+import { Switch } from '@/components/ui/switch'
+import { geocodeAddress } from '@/services/googleMaps'
 import { useToast } from '@/hooks/use-toast'
 import {
   Dialog,
@@ -64,6 +69,8 @@ export default function AdminPricing() {
   const [loading, setLoading] = useState(true)
   const [savingServices, setSavingServices] = useState(false)
   const [savingSettings, setSavingSettings] = useState(false)
+  const [geocodingCenter, setGeocodingCenter] = useState(false)
+  const [centerAddressInput, setCenterAddressInput] = useState('')
 
   // Create-service dialog state
   const [createOpen, setCreateOpen] = useState(false)
@@ -79,9 +86,66 @@ export default function AdminPricing() {
       .then(([s, svc]) => {
         setSettings(s)
         setServices(svc)
+        setCenterAddressInput(s.service_center_address || '')
       })
       .finally(() => setLoading(false))
   }, [])
+
+  const handleGeocodeCenter = async () => {
+    const query = centerAddressInput.trim()
+    if (!query) {
+      toast({
+        title: 'Endereço vazio',
+        description: 'Digite um endereço ou cidade para localizar o centro.',
+        variant: 'destructive',
+      })
+      return
+    }
+
+    setGeocodingCenter(true)
+    try {
+      const result = await geocodeAddress(query)
+      if (!result) {
+        toast({
+          title: 'Não encontrado',
+          description: 'Não foi possível obter as coordenadas para o endereço informado.',
+          variant: 'destructive',
+        })
+        return
+      }
+
+      setSettings((prev) => ({
+        ...prev,
+        service_center_lat: result.lat,
+        service_center_lng: result.lng,
+        service_center_address: result.formattedAddress || query,
+      }))
+      setCenterAddressInput(result.formattedAddress || query)
+
+      toast({
+        title: 'Centro localizado!',
+        description: `Coordenadas: ${result.lat.toFixed(5)}, ${result.lng.toFixed(5)}. Salve as alterações para ativar.`,
+      })
+    } catch {
+      toast({
+        title: 'Erro de localização',
+        description: 'Falha ao consultar o serviço de mapas.',
+        variant: 'destructive',
+      })
+    } finally {
+      setGeocodingCenter(false)
+    }
+  }
+
+  const handleClearCenter = () => {
+    setSettings((prev) => ({
+      ...prev,
+      service_center_lat: null,
+      service_center_lng: null,
+      service_center_address: '',
+    }))
+    setCenterAddressInput('')
+  }
 
   const handleNumberChange = (key: keyof PlatformSettings, value: string) => {
     const num = value === '' ? 0 : parseFloat(value)
@@ -124,6 +188,10 @@ export default function AdminPricing() {
         min_distance_fee: settings.min_distance_fee,
         flat_travel_fee: settings.flat_travel_fee,
         service_radius_km: settings.service_radius_km,
+        service_center_lat: settings.service_center_lat,
+        service_center_lng: settings.service_center_lng,
+        service_center_address: centerAddressInput.trim() || settings.service_center_address,
+        payments_demo_enabled: settings.payments_demo_enabled,
       })
       setSettings(updated)
       toast({
@@ -408,18 +476,92 @@ export default function AdminPricing() {
         </CardContent>
       </Card>
 
-      {/* Travel / displacement fee */}
+      {/* Travel / displacement fee and coverage center */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <MapPin className="h-5 w-5 text-primary" /> Custo de Deslocamento
+            <MapPin className="h-5 w-5 text-primary" /> Área de Atendimento e Deslocamento
           </CardTitle>
           <CardDescription>
-            Configure a taxa fixa de deslocamento aplicada às solicitações e o raio máximo de
-            atendimento.
+            Configure o centro geográfico da operação, o raio máximo de cobertura e a taxa fixa de
+            deslocamento.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-6">
+          {/* Status do centro configurado */}
+          {settings.service_center_lat != null && settings.service_center_lng != null ? (
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-4 text-sm text-emerald-900 space-y-1">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold flex items-center gap-1.5">
+                  <MapPin className="h-4 w-4 text-emerald-600" /> Centro configurado e bloqueio
+                  ativo
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleClearCenter}
+                  className="text-xs text-muted-foreground hover:text-destructive h-7 px-2"
+                >
+                  Limpar centro
+                </Button>
+              </div>
+              <p className="text-xs text-emerald-800">
+                <strong>Endereço:</strong> {settings.service_center_address || 'Coordenadas salvas'}
+              </p>
+              <p className="text-xs text-emerald-700 font-mono">
+                Lat: {settings.service_center_lat.toFixed(6)}, Lng:{' '}
+                {settings.service_center_lng.toFixed(6)} | Raio: {settings.service_radius_km} km
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3.5 text-xs text-amber-900 flex items-start gap-2">
+              <AlertCircle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+              <div>
+                <strong>Centro da área não configurado — bloqueio por raio inativo.</strong>
+                <p className="text-amber-800 mt-0.5">
+                  Informe o endereço central abaixo e clique em &quot;Localizar no mapa&quot; para
+                  ativar a restrição geográfica de pedidos.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Localização do centro */}
+          <div className="space-y-2 rounded-lg border bg-slate-50/50 p-4">
+            <Label htmlFor="center_address">Endereço do centro da área de atendimento</Label>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Input
+                id="center_address"
+                placeholder="Ex.: Centro de Campinas, SP ou Praça da Sé, São Paulo"
+                value={centerAddressInput}
+                onChange={(e) => setCenterAddressInput(e.target.value)}
+                className="bg-white flex-1"
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleGeocodeCenter}
+                disabled={geocodingCenter}
+                className="shrink-0"
+              >
+                {geocodingCenter ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Localizando...
+                  </>
+                ) : (
+                  <>
+                    <Search className="h-4 w-4 mr-2" /> Localizar no mapa
+                  </>
+                )}
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Usa o proxy do Google Maps para obter latitude e longitude precisas sem expor a chave
+              de API.
+            </p>
+          </div>
+
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="flat_travel_fee">Taxa fixa de deslocamento (R$)</Label>
@@ -459,7 +601,7 @@ export default function AdminPricing() {
                 </>
               ) : (
                 <>
-                  <Save className="h-4 w-4 mr-2" /> Salvar custo de deslocamento
+                  <Save className="h-4 w-4 mr-2" /> Salvar área e deslocamento
                 </>
               )}
             </Button>
@@ -526,6 +668,53 @@ export default function AdminPricing() {
               ) : (
                 <>
                   <Save className="h-4 w-4 mr-2" /> Salvar preços dinâmicos
+                </>
+              )}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Pagamento em Modo Demo (Alteração 2) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <CreditCard className="h-5 w-5 text-primary" /> Modo de Pagamento em Produção / Teste
+          </CardTitle>
+          <CardDescription>
+            Controle se o checkout permite pagamentos simulados quando as credenciais do Mercado
+            Pago não estiverem disponíveis.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between py-2">
+            <div className="space-y-0.5 pr-4">
+              <Label htmlFor="payments_demo_switch" className="text-base font-medium">
+                Permitir modo demo de pagamento (sem cobrança real)
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Quando desligado (recomendado em produção), o checkout bloqueia a criação de
+                serviços caso as credenciais reais do Mercado Pago estejam ausentes, exibindo aviso
+                de indisponibilidade. Quando ligado, exibe formulário simulado para testes.
+              </p>
+            </div>
+            <Switch
+              id="payments_demo_switch"
+              checked={!!settings.payments_demo_enabled}
+              onCheckedChange={(checked) =>
+                setSettings((s) => ({ ...s, payments_demo_enabled: checked }))
+              }
+            />
+          </div>
+          <div className="flex justify-end">
+            <Button onClick={handleSaveSettings} disabled={savingSettings}>
+              {savingSettings ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Salvando...
+                </>
+              ) : (
+                <>
+                  <Save className="h-4 w-4 mr-2" /> Salvar modo de pagamento
                 </>
               )}
             </Button>

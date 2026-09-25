@@ -36,12 +36,34 @@ routerAdd('GET', '/backend/v1/payments/config', (e) => {
   } else if (provider === 'mercadopago') {
     publicKey = $os.getenv('MERCADOPAGO_PUBLIC_KEY') || ''
   }
-  if (!provider) {
-    return e.json(200, { ok: true, config: null })
-  }
-  return e.json(200, { ok: true, config: { provider: provider, publicKey: publicKey } })
-})
 
+  let demoEnabled = false
+  try {
+    const settingsRows = $app.findRecordsByFilter('settings', '1=1', '', 1, 0)
+    if (settingsRows.length > 0) {
+      demoEnabled = settingsRows[0].getBool('payments_demo_enabled')
+    }
+  } catch (_) {}
+
+  if (!provider) {
+    return e.json(200, {
+      ok: true,
+      config: {
+        provider: null,
+        publicKey: '',
+        demoEnabled: demoEnabled,
+      },
+    })
+  }
+  return e.json(200, {
+    ok: true,
+    config: {
+      provider: provider,
+      publicKey: publicKey,
+      demoEnabled: demoEnabled,
+    },
+  })
+})
 // ---------------------------------------------------------------------------
 // POST /backend/v1/payments/create-split
 //   body: { amount, currency, proAccountId, description, jobId, paymentToken, paymentMethodId, payerEmail, installments }
@@ -237,6 +259,22 @@ routerAdd('POST', '/backend/v1/payments/create-split', (e) => {
       )
     }
   } else {
+    // Demo mode: só permitido se explicitamente habilitado nas configurações
+    let demoAllowed = false
+    try {
+      const rows = $app.findRecordsByFilter('settings', '1=1', '', 1, 0)
+      if (rows.length > 0) {
+        demoAllowed = rows[0].getBool('payments_demo_enabled')
+      }
+    } catch (_) {}
+
+    if (!demoAllowed) {
+      return e.json(503, {
+        ok: false,
+        error: 'Pagamento temporariamente indisponível. Tente novamente em instantes.',
+      })
+    }
+
     // Demo mode: synthesize a realistic intent id.
     intentId = 'pi_demo_' + $security.randomString(16)
     logPaymentEvent(jobId, intentId, 'create', 'approved', {

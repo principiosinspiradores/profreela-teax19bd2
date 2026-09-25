@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-25T00:41:46.130Z",
+  "generatedAt": "2026-09-25T17:32:18.984Z",
   "collections": [
     {
       "name": "users",
@@ -1041,6 +1041,30 @@
         {
           "name": "service_radius_km",
           "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "service_center_lat",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "service_center_lng",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "service_center_address",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "payments_demo_enabled",
+          "type": "bool",
           "required": false,
           "system": false
         }

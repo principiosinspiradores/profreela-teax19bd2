@@ -4,6 +4,7 @@ import { getSettings, type PlatformSettings } from './settings'
 export interface PaymentConfig {
   provider: 'stripe' | 'mercadopago' | null
   publicKey: string
+  demoEnabled?: boolean
 }
 
 export interface PaymentSplit {
@@ -56,12 +57,13 @@ export async function getPaymentConfig(): Promise<PaymentConfig> {
       return {
         provider: res.config.provider as PaymentConfig['provider'],
         publicKey: res.config.publicKey || '',
+        demoEnabled: !!res.config.demoEnabled,
       }
     }
   } catch {
     /* intentionally ignored */
   }
-  return { provider: null, publicKey: '' }
+  return { provider: null, publicKey: '', demoEnabled: false }
 }
 
 /**

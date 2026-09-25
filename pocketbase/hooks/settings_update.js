@@ -37,6 +37,10 @@ routerAdd(
       'min_distance_fee',
       'flat_travel_fee',
       'service_radius_km',
+      'service_center_lat',
+      'service_center_lng',
+      'service_center_address',
+      'payments_demo_enabled',
     ]
 
     let record = null
@@ -97,6 +101,20 @@ routerAdd(
         min_distance_fee: record.getFloat('min_distance_fee') || 8,
         flat_travel_fee: record.getFloat('flat_travel_fee') || 10,
         service_radius_km: record.getFloat('service_radius_km') || 15,
+        service_center_lat:
+          record.get('service_center_lat') !== null &&
+          record.get('service_center_lat') !== undefined &&
+          record.get('service_center_lat') !== ''
+            ? record.getFloat('service_center_lat')
+            : null,
+        service_center_lng:
+          record.get('service_center_lng') !== null &&
+          record.get('service_center_lng') !== undefined &&
+          record.get('service_center_lng') !== ''
+            ? record.getFloat('service_center_lng')
+            : null,
+        service_center_address: record.getString('service_center_address') || '',
+        payments_demo_enabled: record.getBool('payments_demo_enabled'),
         updated: record.getString('updated'),
       },
       updated: true,

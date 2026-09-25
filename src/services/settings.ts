@@ -40,6 +40,14 @@ export interface PlatformSettings {
   flat_travel_fee: number
   /** Service coverage radius in km. */
   service_radius_km: number
+  /** Latitude of the service coverage center. Null when not configured. */
+  service_center_lat?: number | null
+  /** Longitude of the service coverage center. Null when not configured. */
+  service_center_lng?: number | null
+  /** Friendly label / address of the service coverage center. */
+  service_center_address?: string
+  /** Whether fallback demo card payment mode is allowed when gateway is unconfigured. */
+  payments_demo_enabled?: boolean
   updated?: string
 }
 
@@ -64,6 +72,10 @@ const DEFAULT_SETTINGS: PlatformSettings = {
   min_distance_fee: 8,
   flat_travel_fee: 10,
   service_radius_km: 15,
+  service_center_lat: null,
+  service_center_lng: null,
+  service_center_address: '',
+  payments_demo_enabled: false,
 }
 
 /** Fetch the current platform settings (public). Falls back to defaults. */

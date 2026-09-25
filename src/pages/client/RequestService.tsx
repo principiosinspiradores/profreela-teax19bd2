@@ -36,7 +36,7 @@ import { combineDateAndTime, formatTimeRange } from '@/lib/scheduling'
 import { getSavedLocations, createSavedLocation, type SavedLocation } from '@/services/locations'
 import { useAuth } from '@/hooks/use-auth'
 import AddressAutocomplete, { type ParsedAddress } from '@/components/AddressAutocomplete'
-import { geocodeAddress } from '@/services/googleMaps'
+import { geocodeAddress, haversineKm } from '@/services/googleMaps'
 import { Checkout } from '@/components/Checkout'
 import {
   Dialog,
@@ -163,16 +163,32 @@ export default function RequestService() {
         lng = geo.lng
       }
 
-      // Verificação de raio de atendimento (quando coordenadas de referência estiverem disponíveis).
-      // Se houver um ponto central ou se geocoding indicar fora do raio, bloqueia com aviso claro.
+      // Verificação de raio de atendimento REAL (Alteração 1b)
+      // Se settings tiver service_center_lat/lng configurados E o endereço foi geocodificado com sucesso,
+      // calcular a distância com haversineKm em linha reta (sem chamada extra à API).
+      // Se distância > service_radius_km → bloqueia e não abre checkout.
+      // Se centro não configurado OU geocoding falhar → fail-open (comportamento atual).
       const serviceRadiusKm = settings.service_radius_km || DEFAULT_SETTINGS.service_radius_km
-      if (typeof serviceRadiusKm === 'number' && serviceRadiusKm > 0) {
-        // Bloco preparado para validação de raio quando centro ou geocoding de referência estiver configurado
-        const isOutOfRadius = false // Mantém preparado sem inventar distância
-        if (isOutOfRadius) {
+      const centerLat = settings.service_center_lat
+      const centerLng = settings.service_center_lng
+      const hasCenter =
+        centerLat !== null &&
+        centerLat !== undefined &&
+        !isNaN(Number(centerLat)) &&
+        centerLng !== null &&
+        centerLng !== undefined &&
+        !isNaN(Number(centerLng)) &&
+        (centerLat !== 0 || centerLng !== 0)
+
+      if (hasCenter && lat != null && lng != null && serviceRadiusKm > 0) {
+        const distance = haversineKm(
+          { lat: Number(centerLat), lng: Number(centerLng) },
+          { lat, lng },
+        )
+        if (distance > serviceRadiusKm) {
           toast({
             title: 'Fora da área de atendimento',
-            description: `Este endereço fica fora do nosso raio de atendimento (${serviceRadiusKm} km).`,
+            description: `Este endereço fica fora do nosso raio de atendimento (${serviceRadiusKm} km). Distância calculada: ${distance.toFixed(1)} km.`,
             variant: 'destructive',
           })
           setLoading(false)

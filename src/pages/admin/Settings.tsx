@@ -102,6 +102,7 @@ export default function AdminSettings() {
         module_reviews_enabled: settings.module_reviews_enabled,
         module_referrals_enabled: settings.module_referrals_enabled,
         module_dynamic_pricing_enabled: settings.module_dynamic_pricing_enabled,
+        payments_demo_enabled: settings.payments_demo_enabled,
         guarantee_period_days: settings.guarantee_period_days,
         clock_in_deadline_hours: settings.clock_in_deadline_hours,
       })
@@ -543,6 +544,11 @@ export default function AdminSettings() {
               key: 'module_dynamic_pricing_enabled' as const,
               label: 'Precificação dinâmica',
               desc: 'Ajuste automático de preços conforme a demanda em tempo real.',
+            },
+            {
+              key: 'payments_demo_enabled' as const,
+              label: 'Modo demo de pagamento',
+              desc: 'Permitir checkout simulado caso o gateway de pagamento esteja sem credenciais ativas.',
             },
           ].map((m) => (
             <div

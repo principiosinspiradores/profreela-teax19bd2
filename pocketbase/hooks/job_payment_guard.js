@@ -27,6 +27,58 @@ onRecordCreateRequest((e) => {
     return
   }
 
+  // --- Validação aditiva do raio de atendimento (Alteração 1c) ----------------
+  // Se settings tiver centro configurado e o payload trouxer latitude/longitude,
+  // calcular haversine e rejeitar com erro 400 se ultrapassar o raio de atendimento.
+  // Falha aberta: se sem centro ou sem coordenadas, aceita normalmente.
+  const jobLat = record.getFloat('latitude')
+  const jobLng = record.getFloat('longitude')
+
+  if (jobLat && jobLng) {
+    try {
+      const settingsRows = $app.findRecordsByFilter('settings', '1=1', '', 1, 0)
+      if (settingsRows.length > 0) {
+        const s = settingsRows[0]
+        const centerLatVal = s.get('service_center_lat')
+        const centerLngVal = s.get('service_center_lng')
+        const hasCenter =
+          centerLatVal !== null &&
+          centerLatVal !== undefined &&
+          centerLatVal !== '' &&
+          centerLngVal !== null &&
+          centerLngVal !== undefined &&
+          centerLngVal !== ''
+
+        if (hasCenter) {
+          const centerLat = s.getFloat('service_center_lat')
+          const centerLng = s.getFloat('service_center_lng')
+          const radiusKm = s.getFloat('service_radius_km') || 15
+
+          // Haversine inline em km
+          const R = 6371
+          const dLat = ((jobLat - centerLat) * Math.PI) / 180
+          const dLng = ((jobLng - centerLng) * Math.PI) / 180
+          const lat1 = (centerLat * Math.PI) / 180
+          const lat2 = (jobLat * Math.PI) / 180
+          const h =
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.sin(dLng / 2) * Math.sin(dLng / 2) * Math.cos(lat1) * Math.cos(lat2)
+          const distanceKm = 2 * R * Math.asin(Math.sqrt(h))
+
+          if (distanceKm > radiusKm) {
+            throw new BadRequestError('Fora da área de atendimento (raio de ' + radiusKm + ' km)')
+          }
+        }
+      }
+    } catch (err) {
+      if (err instanceof BadRequestError || (err && err.name === 'BadRequestError')) {
+        throw err
+      }
+      // Outros erros: falha aberta para não quebrar fluxos existentes
+      console.log('[job_payment_guard] erro ao verificar raio de atendimento:', err)
+    }
+  }
+
   const requested = record.getString('payment_status')
   const intentId = record.getString('payment_intent_id')
 
