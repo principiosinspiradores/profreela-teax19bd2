@@ -31,6 +31,9 @@ import {
   Edit2,
   Check,
   X,
+  Trash2,
+  CheckCircle2,
+  XCircle,
 } from 'lucide-react'
 import {
   Dialog,
@@ -47,7 +50,7 @@ import { formatPhoneNumber } from '@/lib/phone'
 import { formatCPF, cleanDigits, validateCPF } from '@/services/payouts'
 
 type Role = 'admin' | 'pro' | 'client'
-type Status = 'active' | 'pending' | 'blocked'
+type Status = 'active' | 'pending' | 'blocked' | 'deleted'
 
 const roleLabel: Record<Role, string> = {
   admin: 'Admin',
@@ -59,12 +62,14 @@ const statusVariant: Record<Status, 'default' | 'secondary' | 'destructive' | 'o
   active: 'default',
   pending: 'secondary',
   blocked: 'destructive',
+  deleted: 'outline',
 }
 
 const statusLabel: Record<Status, string> = {
   active: 'Ativo',
   pending: 'Pendente',
   blocked: 'Bloqueado',
+  deleted: 'Excluído',
 }
 
 export default function AdminUsers() {
@@ -74,10 +79,13 @@ export default function AdminUsers() {
   const [updatingId, setUpdatingId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState<string>('all')
+  const [statusFilter, setStatusFilter] = useState<string>('standard')
   const [editingCpfUser, setEditingCpfUser] = useState<any | null>(null)
   const [cpfInput, setCpfInput] = useState('')
   const [cpfError, setCpfError] = useState<string | null>(null)
   const [savingCpf, setSavingCpf] = useState(false)
+  const [userToDelete, setUserToDelete] = useState<any | null>(null)
+  const [deletingUser, setDeletingUser] = useState(false)
 
   const load = async () => {
     try {
@@ -210,14 +218,68 @@ export default function AdminUsers() {
       (u.email || '').toLowerCase().includes(q) ||
       (u.cpf || '').includes(cleanDigits(q))
     const matchesRole = roleFilter === 'all' || u.role === roleFilter
-    return matchesSearch && matchesRole
+
+    // Status filter:
+    // - 'standard': hide 'deleted' users by default
+    // - 'deleted': show ONLY deleted users
+    // - 'all': show everyone
+    let matchesStatus = true
+    if (statusFilter === 'standard') {
+      matchesStatus = u.status !== 'deleted'
+    } else if (statusFilter === 'deleted') {
+      matchesStatus = u.status === 'deleted'
+    } else if (statusFilter !== 'all') {
+      matchesStatus = u.status === statusFilter
+    }
+
+    return matchesSearch && matchesRole && matchesStatus
   })
 
+  const handleSoftDelete = async () => {
+    if (!userToDelete) return
+    if (userToDelete.role === 'admin') {
+      toast({
+        title: 'Operação não permitida',
+        description: 'Administradores não podem ser excluídos.',
+        variant: 'destructive',
+      })
+      setUserToDelete(null)
+      return
+    }
+
+    setDeletingUser(true)
+    try {
+      const updated = await updateUser(userToDelete.id, {
+        status: 'deleted',
+        suspended: true,
+      })
+      refreshOne({
+        ...userToDelete,
+        status: updated.status || 'deleted',
+        suspended: true,
+      })
+      toast({
+        title: 'Usuário excluído',
+        description: `${userToDelete.name || userToDelete.email} foi marcado como excluído e suspenso.`,
+      })
+      setUserToDelete(null)
+    } catch (err: any) {
+      toast({
+        title: 'Erro ao excluir usuário',
+        description: err?.message || 'Não foi possível marcar o usuário como excluído.',
+        variant: 'destructive',
+      })
+    } finally {
+      setDeletingUser(false)
+    }
+  }
+
   const counts = {
-    total: users.length,
+    total: users.filter((u) => u.status !== 'deleted').length,
     active: users.filter((u) => u.status === 'active').length,
     pending: users.filter((u) => u.status === 'pending').length,
     blocked: users.filter((u) => u.status === 'blocked').length,
+    deleted: users.filter((u) => u.status === 'deleted').length,
   }
 
   const fmtDate = (iso: string) => {
@@ -242,10 +304,10 @@ export default function AdminUsers() {
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-5">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Total</CardTitle>
+            <CardTitle className="text-sm font-medium">Total (Válidos)</CardTitle>
             <UsersIcon className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
@@ -276,6 +338,20 @@ export default function AdminUsers() {
             <div className="text-2xl font-bold text-red-600">{counts.blocked}</div>
           </CardContent>
         </Card>
+        <Card
+          className="cursor-pointer hover:border-slate-400 transition-colors"
+          onClick={() => setStatusFilter(statusFilter === 'deleted' ? 'standard' : 'deleted')}
+        >
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium flex items-center justify-between">
+              <span>Excluídos</span>
+              <Trash2 className="h-4 w-4 text-muted-foreground" />
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-slate-600">{counts.deleted}</div>
+          </CardContent>
+        </Card>
       </div>
 
       <Card>
@@ -299,14 +375,27 @@ export default function AdminUsers() {
               />
             </div>
             <Select value={roleFilter} onValueChange={setRoleFilter}>
-              <SelectTrigger className="w-full sm:w-[200px]">
-                <SelectValue placeholder="Filtrar por perfil" />
+              <SelectTrigger className="w-full sm:w-[180px]">
+                <SelectValue placeholder="Filtrar por papel" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">Todos os perfis</SelectItem>
+                <SelectItem value="all">Todos os papéis</SelectItem>
                 <SelectItem value="admin">Admin</SelectItem>
                 <SelectItem value="pro">Profissional</SelectItem>
                 <SelectItem value="client">Cliente</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-full sm:w-[180px]">
+                <SelectValue placeholder="Filtrar status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="standard">Padrão (sem excluídos)</SelectItem>
+                <SelectItem value="all">Todos (inclui excluídos)</SelectItem>
+                <SelectItem value="deleted">Somente Excluídos</SelectItem>
+                <SelectItem value="active">Ativos</SelectItem>
+                <SelectItem value="pending">Pendentes</SelectItem>
+                <SelectItem value="blocked">Bloqueados</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -328,6 +417,7 @@ export default function AdminUsers() {
                     <TableHead>Email</TableHead>
                     <TableHead>CPF</TableHead>
                     <TableHead>Telefone</TableHead>
+                    <TableHead>Papel</TableHead>
                     <TableHead>Perfil</TableHead>
                     <TableHead>Avaliação</TableHead>
                     <TableHead>Status</TableHead>
@@ -369,9 +459,9 @@ export default function AdminUsers() {
                         <Select
                           value={user.role}
                           onValueChange={(v) => handleChangeRole(user, v as Role)}
-                          disabled={updatingId === user.id}
+                          disabled={updatingId === user.id || user.status === 'deleted'}
                         >
-                          <SelectTrigger className="w-[160px]">
+                          <SelectTrigger className="w-[140px]">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -380,6 +470,27 @@ export default function AdminUsers() {
                             <SelectItem value="client">Cliente</SelectItem>
                           </SelectContent>
                         </Select>
+                      </TableCell>
+                      <TableCell>
+                        {user.role === 'pro' ? (
+                          user.profile_complete ? (
+                            <Badge
+                              variant="outline"
+                              className="text-emerald-700 bg-emerald-50 border-emerald-300 gap-1"
+                            >
+                              <CheckCircle2 className="h-3 w-3" /> Completo
+                            </Badge>
+                          ) : (
+                            <Badge
+                              variant="outline"
+                              className="text-amber-700 bg-amber-50 border-amber-300 gap-1"
+                            >
+                              <XCircle className="h-3 w-3" /> Incompleto
+                            </Badge>
+                          )
+                        ) : (
+                          <span className="text-muted-foreground text-xs">—</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         {user.role === 'pro' ? (
@@ -417,11 +528,11 @@ export default function AdminUsers() {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
-                          {user.role === 'pro' && user.suspended && (
+                          {user.role === 'pro' && user.suspended && user.status !== 'deleted' && (
                             <Button
                               variant="outline"
                               size="sm"
-                              disabled={updatingId === user.id}
+                              disabled={updatingId === user.id || deletingUser}
                               onClick={() => handleReactivateSuspended(user)}
                             >
                               {updatingId === user.id ? (
@@ -432,21 +543,40 @@ export default function AdminUsers() {
                               Reativar
                             </Button>
                           )}
-                          <Button
-                            variant={user.status === 'blocked' ? 'outline' : 'destructive'}
-                            size="sm"
-                            disabled={updatingId === user.id}
-                            onClick={() => handleToggleBlock(user)}
-                          >
-                            {updatingId === user.id ? (
-                              <Loader2 className="h-4 w-4 mr-2" />
-                            ) : user.status === 'blocked' ? (
-                              <ShieldCheck className="h-4 w-4 mr-2" />
-                            ) : (
-                              <ShieldOff className="h-4 w-4 mr-2" />
-                            )}
-                            {user.status === 'blocked' ? 'Desbloquear' : 'Bloquear'}
-                          </Button>
+                          {user.status !== 'deleted' ? (
+                            <Button
+                              variant={user.status === 'blocked' ? 'outline' : 'destructive'}
+                              size="sm"
+                              disabled={updatingId === user.id || deletingUser}
+                              onClick={() => handleToggleBlock(user)}
+                            >
+                              {updatingId === user.id ? (
+                                <Loader2 className="h-4 w-4 mr-2" />
+                              ) : user.status === 'blocked' ? (
+                                <ShieldCheck className="h-4 w-4 mr-2" />
+                              ) : (
+                                <ShieldOff className="h-4 w-4 mr-2" />
+                              )}
+                              {user.status === 'blocked' ? 'Desbloquear' : 'Bloquear'}
+                            </Button>
+                          ) : (
+                            <span className="text-xs text-muted-foreground self-center">
+                              Conta desativada
+                            </span>
+                          )}
+                          {user.role !== 'admin' && user.status !== 'deleted' && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                              disabled={updatingId === user.id || deletingUser}
+                              onClick={() => setUserToDelete(user)}
+                              title="Excluir usuário"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              <span className="sr-only sm:not-sr-only sm:ml-1">Excluir</span>
+                            </Button>
+                          )}
                         </div>
                       </TableCell>{' '}
                     </TableRow>
@@ -457,6 +587,46 @@ export default function AdminUsers() {
           )}
         </CardContent>
       </Card>
+
+      {/* Soft delete confirmation dialog */}
+      <Dialog
+        open={!!userToDelete}
+        onOpenChange={(o) => {
+          if (!o && !deletingUser) {
+            setUserToDelete(null)
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Excluir usuário?</DialogTitle>
+            <DialogDescription>
+              O usuário <strong>{userToDelete?.name || userToDelete?.email}</strong> será marcado
+              como <code>excluído</code> e <code>suspenso</code>. O registro não é apagado
+              fisicamente para preservar o histórico de pagamentos e auditoria.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2 text-sm text-muted-foreground space-y-1">
+            <p>• O usuário não conseguirá mais realizar login na plataforma.</p>
+            <p>• O usuário deixará de receber ofertas e notificações.</p>
+            <p>• Ele sumirá da listagem padrão (acessível pelo filtro "Excluídos").</p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setUserToDelete(null)} disabled={deletingUser}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={handleSoftDelete} disabled={deletingUser}>
+              {deletingUser ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Excluindo...
+                </>
+              ) : (
+                'Confirmar Exclusão'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit CPF Dialog */}
       <Dialog

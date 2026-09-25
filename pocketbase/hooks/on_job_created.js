@@ -112,6 +112,8 @@ onRecordAfterCreateSuccess((e) => {
   for (let i = 0; i < pros.length; i++) {
     const pro = pros[i]
     if (pro.getBool('suspended')) continue
+    if (pro.getString('status') === 'deleted') continue
+    if (!pro.getBool('profile_complete')) continue
     // Pros blocked for cancelling an accepted job don't get job offers.
     const blockedUntilStr = pro.getString('blocked_until')
     if (blockedUntilStr) {

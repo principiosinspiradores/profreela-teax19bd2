@@ -229,6 +229,8 @@ cronAdd('cancel_stale_pending', '*/5 * * * *', () => {
         for (let p = 0; p < pros.length; p++) {
           const pro = pros[p]
           if (pro.getBool('suspended')) continue
+          if (pro.getString('status') === 'deleted') continue
+          if (!pro.getBool('profile_complete')) continue
           const blockedUntilStr = pro.getString('blocked_until')
           if (blockedUntilStr) {
             const blockedMs = new Date(blockedUntilStr).getTime()

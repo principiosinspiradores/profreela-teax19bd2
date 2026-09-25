@@ -72,6 +72,9 @@ export const rejectDocument = (id: string, note: string) =>
     reviewer_note: note,
   })
 
+/** Delete a document record + file from storage (admin action). */
+export const deleteDocument = (id: string) => pb.collection('documents').delete(id)
+
 /** Absolute URL for a stored document file. */
 export const documentFileUrl = (doc: DocumentRecord): string => {
   const record = doc as unknown as Record<string, unknown>

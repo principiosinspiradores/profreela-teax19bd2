@@ -27,7 +27,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { FileCheck2, FileText, FileX2, Search, Loader2, Users, Clock } from 'lucide-react'
+import { FileCheck2, FileText, FileX2, Search, Loader2, Users, Clock, Trash2 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import {
   approveDocument,
@@ -35,6 +35,7 @@ import {
   docTypeLabel,
   getDocumentsByStatus,
   rejectDocument,
+  deleteDocument,
   type DocumentRecord,
 } from '@/services/documents'
 import { updateUser } from '@/services/api'
@@ -71,6 +72,8 @@ export default function AdminDocuments() {
   const [updatingId, setUpdatingId] = useState<string | null>(null)
   const [rejectDoc, setRejectDoc] = useState<DocumentRecord | null>(null)
   const [rejectNote, setRejectNote] = useState('')
+  const [deleteDoc, setDeleteDoc] = useState<DocumentRecord | null>(null)
+  const [deleting, setDeleting] = useState(false)
   const [imageDialog, setImageDialog] = useState<{ url: string; name: string } | null>(null)
 
   const load = useCallback(async () => {
@@ -148,6 +151,28 @@ export default function AdminDocuments() {
       })
     } finally {
       setUpdatingId(null)
+    }
+  }
+
+  const handleDelete = async () => {
+    if (!deleteDoc) return
+    setDeleting(true)
+    try {
+      await deleteDocument(deleteDoc.id)
+      toast({
+        title: 'Documento excluído',
+        description: `O documento de ${docUserName(deleteDoc)} foi removido com sucesso.`,
+      })
+      setDeleteDoc(null)
+      await load()
+    } catch (err) {
+      toast({
+        title: 'Erro ao excluir documento',
+        description: getErrorMessage(err),
+        variant: 'destructive',
+      })
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -327,35 +352,48 @@ export default function AdminDocuments() {
                           ) : null}
                         </TableCell>
                         <TableCell className="text-right">
-                          {doc.status === 'pending' ? (
-                            <div className="flex justify-end gap-2">
-                              <Button
-                                size="sm"
-                                disabled={updatingId === doc.id}
-                                onClick={() => handleApprove(doc)}
-                              >
-                                {updatingId === doc.id ? (
-                                  <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                                ) : (
-                                  <FileCheck2 className="h-4 w-4 mr-1" />
-                                )}
-                                Aprovar
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                disabled={updatingId === doc.id}
-                                onClick={() => setRejectDoc(doc)}
-                              >
-                                <FileX2 className="h-4 w-4 mr-1" />
-                                Rejeitar
-                              </Button>
-                            </div>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">
-                              Analisado {fmtDate(doc.reviewed_at)}
-                            </span>
-                          )}
+                          <div className="flex items-center justify-end gap-2">
+                            {doc.status === 'pending' ? (
+                              <>
+                                <Button
+                                  size="sm"
+                                  disabled={updatingId === doc.id || deleting}
+                                  onClick={() => handleApprove(doc)}
+                                >
+                                  {updatingId === doc.id ? (
+                                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                  ) : (
+                                    <FileCheck2 className="h-4 w-4 mr-1" />
+                                  )}
+                                  Aprovar
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  disabled={updatingId === doc.id || deleting}
+                                  onClick={() => setRejectDoc(doc)}
+                                >
+                                  <FileX2 className="h-4 w-4 mr-1" />
+                                  Rejeitar
+                                </Button>
+                              </>
+                            ) : (
+                              <span className="text-xs text-muted-foreground mr-1">
+                                Analisado {fmtDate(doc.reviewed_at)}
+                              </span>
+                            )}
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                              disabled={updatingId === doc.id || deleting}
+                              onClick={() => setDeleteDoc(doc)}
+                              title="Excluir documento"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              <span className="sr-only sm:not-sr-only sm:ml-1">Excluir</span>
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     )
@@ -366,6 +404,33 @@ export default function AdminDocuments() {
           )}
         </CardContent>
       </Card>
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={!!deleteDoc} onOpenChange={(open) => !open && !deleting && setDeleteDoc(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Excluir documento?</DialogTitle>
+            <DialogDescription>
+              Esta ação removerá o registro e o arquivo de <strong>{docUserName(deleteDoc)}</strong>{' '}
+              ({docTypeLabel(deleteDoc?.type || '')}) do armazenamento permanentemente. Não pode ser
+              desfeito.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDoc(null)} disabled={deleting}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
+              {deleting ? (
+                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4 mr-1" />
+              )}
+              Excluir documento
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Reject dialog */}
       <Dialog open={!!rejectDoc} onOpenChange={(open) => !open && setRejectDoc(null)}>

@@ -92,7 +92,20 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const signIn = async (email: string, password: string) => {
     try {
-      await pb.collection('users').authWithPassword(email, password)
+      const authData = await pb.collection('users').authWithPassword(email, password)
+      const record = authData?.record || pb.authStore.record
+      if (record?.status === 'blocked') {
+        pb.authStore.clear()
+        return {
+          error: new Error('Sua conta está bloqueada. Entre em contato com o suporte.'),
+        }
+      }
+      if (record?.status === 'deleted') {
+        pb.authStore.clear()
+        return {
+          error: new Error('Esta conta foi excluída ou desativada.'),
+        }
+      }
       return { error: null }
     } catch (error) {
       return { error }

@@ -11,6 +11,7 @@ import {
   Play,
   Navigation2,
   AlertTriangle,
+  CheckCircle2,
 } from 'lucide-react'
 import pb from '@/lib/pocketbase/client'
 import { ClientResponseError } from 'pocketbase'
@@ -46,6 +47,7 @@ import {
   declineJob,
 } from '@/services/api'
 import { getSettings, DEFAULT_SETTINGS, type PlatformSettings } from '@/services/settings'
+import { getProPaymentAccount, type ProPaymentAccount } from '@/services/payouts'
 import { getHourMultiplier, shortJobBand } from '@/lib/pricing'
 import { formatScheduledSlot } from '@/lib/scheduling'
 import { useRealtime } from '@/hooks/use-realtime'
@@ -88,6 +90,7 @@ export default function ProDashboard() {
   const [todayEarnings, setTodayEarnings] = useState<number | null>(null)
   const [acceptanceRate, setAcceptanceRate] = useState<number | null>(null)
   const [offersCount, setOffersCount] = useState<number>(0)
+  const [paymentAccount, setPaymentAccount] = useState<ProPaymentAccount | null>(null)
 
   const [cancelJobState, setCancelJobState] = useState<any>(null)
   const [cancelReason, setCancelReason] = useState('')
@@ -122,12 +125,16 @@ export default function ProDashboard() {
         .then(setPolicy)
         .catch(() => {})
 
-      // User verification documents
+      // User verification documents & payment account
       try {
-        const docs = await getUserDocuments(user.id)
+        const [docs, acc] = await Promise.all([
+          getUserDocuments(user.id),
+          getProPaymentAccount(user.id),
+        ])
         setDocuments(docs || [])
+        setPaymentAccount(acc)
       } catch (err) {
-        console.warn('[ProDashboard] Erro ao carregar documentos:', err)
+        console.warn('[ProDashboard] Erro ao carregar documentos/conta:', err)
         setDocuments([])
       }
 
@@ -374,6 +381,7 @@ export default function ProDashboard() {
 
   useRealtime('jobs', loadData, isOnline)
   useRealtime('documents', loadData)
+  useRealtime('pro_payment_accounts', loadData)
 
   // Whether the current pro is currently blocked from accepting jobs.
   const blockedUntilMs = blockedUntilRef.current ? new Date(blockedUntilRef.current).getTime() : 0
@@ -573,6 +581,134 @@ export default function ProDashboard() {
           </div>
         )}
       </div>
+
+      {/* Complete Profile Warning Banner */}
+      {!userProfile?.profile_complete && (
+        <div className="relative z-10 mx-4 mt-4 p-4 rounded-2xl bg-amber-50/95 border-2 border-amber-300 shadow-md backdrop-blur-sm">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-3">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-amber-600 shrink-0" />
+              <div>
+                <h3 className="font-semibold text-amber-950 text-base">
+                  Complete seu perfil para receber solicitações
+                </h3>
+                <p className="text-xs text-amber-800">
+                  Você só receberá novas ofertas de serviços quando todas as etapas abaixo forem
+                  concluídas.
+                </p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="bg-white hover:bg-amber-100 border-amber-300 text-amber-900 shrink-0"
+              onClick={() => navigate('/pro/settings')}
+            >
+              Ir para configurações
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-2 border-t border-amber-200">
+            {/* Checklist item 1: Documents */}
+            {(() => {
+              const hasApproved = documents.some((d) => d.status === 'approved')
+              const hasPending = documents.some((d) => d.status === 'pending')
+              return (
+                <div
+                  onClick={() => navigate('/pro/settings')}
+                  className={cn(
+                    'p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition-colors',
+                    hasApproved
+                      ? 'bg-emerald-50/80 border-emerald-300 text-emerald-900'
+                      : hasPending
+                        ? 'bg-blue-50/80 border-blue-300 text-blue-900'
+                        : 'bg-white/80 border-amber-300 text-amber-900 hover:bg-amber-100/50',
+                  )}
+                >
+                  <div className="text-xs">
+                    <span className="font-medium block">1. Documentos</span>
+                    <span className="text-[11px] opacity-80">
+                      {hasApproved ? 'Aprovado' : hasPending ? 'Em análise' : 'Pendente de envio'}
+                    </span>
+                  </div>
+                  {hasApproved ? (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                  ) : hasPending ? (
+                    <Clock className="h-4 w-4 text-blue-600 shrink-0" />
+                  ) : (
+                    <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+                  )}
+                </div>
+              )
+            })()}
+
+            {/* Checklist item 2: Phone */}
+            {(() => {
+              const hasPhone = !!(userProfile?.phone || user?.phone)?.trim()
+              return (
+                <div
+                  onClick={() => navigate('/pro/settings')}
+                  className={cn(
+                    'p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition-colors',
+                    hasPhone
+                      ? 'bg-emerald-50/80 border-emerald-300 text-emerald-900'
+                      : 'bg-white/80 border-amber-300 text-amber-900 hover:bg-amber-100/50',
+                  )}
+                >
+                  <div className="text-xs">
+                    <span className="font-medium block">2. Telefone celular</span>
+                    <span className="text-[11px] opacity-80">
+                      {hasPhone ? 'Cadastrado' : 'Pendente de cadastro'}
+                    </span>
+                  </div>
+                  {hasPhone ? (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                  ) : (
+                    <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+                  )}
+                </div>
+              )
+            })()}
+
+            {/* Checklist item 3: Pix */}
+            {(() => {
+              const hasPix =
+                paymentAccount &&
+                paymentAccount.status === 'verified' &&
+                !!paymentAccount.pix_key?.trim() &&
+                paymentAccount.pix_key_type !== 'none'
+              const isPixPending = paymentAccount && paymentAccount.status === 'pending'
+              return (
+                <div
+                  onClick={() => navigate('/pro/settings')}
+                  className={cn(
+                    'p-2.5 rounded-xl border flex items-center justify-between cursor-pointer transition-colors',
+                    hasPix
+                      ? 'bg-emerald-50/80 border-emerald-300 text-emerald-900'
+                      : isPixPending
+                        ? 'bg-blue-50/80 border-blue-300 text-blue-900'
+                        : 'bg-white/80 border-amber-300 text-amber-900 hover:bg-amber-100/50',
+                  )}
+                >
+                  <div className="text-xs">
+                    <span className="font-medium block">3. Chave Pix</span>
+                    <span className="text-[11px] opacity-80">
+                      {hasPix ? 'Verificada' : isPixPending ? 'Em validação' : 'Pendente'}
+                    </span>
+                  </div>
+                  {hasPix ? (
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                  ) : isPixPending ? (
+                    <Clock className="h-4 w-4 text-blue-600 shrink-0" />
+                  ) : (
+                    <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0" />
+                  )}
+                </div>
+              )
+            })()}
+          </div>
+        </div>
+      )}
 
       {/* Top Status Bar */}
       <div className="relative z-10 m-4 flex justify-between items-center bg-white/90 backdrop-blur-sm p-4 rounded-2xl shadow-sm border border-white/50">

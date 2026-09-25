@@ -138,6 +138,7 @@ export const getUserDocuments = (userId: string) =>
   pb.collection('documents').getFullList({ filter: `user_id="${userId}"`, sort: '-created' })
 export const createDocument = (data: any) => pb.collection('documents').create(data)
 export const updateDocument = (id: string, data: any) => pb.collection('documents').update(id, data)
+export const deleteDocument = (id: string) => pb.collection('documents').delete(id)
 export const declineJob = async (jobId: string, proId: string) => {
   const job = await pb.collection('jobs').getOne(jobId)
   const current: string[] = job.declined_by || []
