@@ -48,6 +48,18 @@ export const getProJobs = (proId: string) =>
     expand: 'service_id,customer_id',
     sort: '-created',
   })
+
+/**
+ * Fetch all jobs related to the professional:
+ * - where pro_id = proId (any status: completed, accepted, in_progress, etc.)
+ * - OR where declined_by ~ proId
+ * Used to calculate real stats (Today's Earnings and Acceptance Rate) without fetching unrelated jobs.
+ */
+export const getProStatsJobs = (proId: string) =>
+  pb.collection('jobs').getFullList({
+    filter: `pro_id="${proId}" || declined_by ~ "${proId}"`,
+    sort: '-created',
+  })
 export const getClientJobs = (clientId: string) =>
   pb.collection('jobs').getFullList({
     filter: `customer_id="${clientId}"`,

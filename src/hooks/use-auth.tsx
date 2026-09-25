@@ -63,9 +63,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         formData.append('terms_accepted', String(!!data.terms_accepted))
         formData.append('emailVisibility', 'true')
         formData.append('avatar', data.avatar)
+        if (data.cpf) {
+          formData.append('cpf', data.cpf)
+        }
         await pb.collection('users').create(formData)
       } else {
-        await pb.collection('users').create({
+        const payload: Record<string, any> = {
           email: data.email,
           password: data.password,
           passwordConfirm: data.password,
@@ -74,7 +77,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           status: data.status,
           terms_accepted: data.terms_accepted,
           emailVisibility: true,
-        })
+        }
+        if (data.cpf) {
+          payload.cpf = data.cpf
+        }
+        await pb.collection('users').create(payload)
       }
       await pb.collection('users').authWithPassword(data.email, data.password)
       return { error: null }

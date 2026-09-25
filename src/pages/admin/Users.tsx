@@ -28,10 +28,23 @@ import {
   RotateCcw,
   Star,
   Phone,
+  Edit2,
+  Check,
+  X,
 } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
 import { useToast } from '@/hooks/use-toast'
 import { getUsers, updateUser } from '@/services/api'
 import { formatPhoneNumber } from '@/lib/phone'
+import { formatCPF, cleanDigits, validateCPF } from '@/services/payouts'
 
 type Role = 'admin' | 'pro' | 'client'
 type Status = 'active' | 'pending' | 'blocked'
@@ -61,6 +74,10 @@ export default function AdminUsers() {
   const [updatingId, setUpdatingId] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState<string>('all')
+  const [editingCpfUser, setEditingCpfUser] = useState<any | null>(null)
+  const [cpfInput, setCpfInput] = useState('')
+  const [cpfError, setCpfError] = useState<string | null>(null)
+  const [savingCpf, setSavingCpf] = useState(false)
 
   const load = async () => {
     try {
@@ -148,10 +165,50 @@ export default function AdminUsers() {
     }
   }
 
+  const handleOpenCpfModal = (user: any) => {
+    setEditingCpfUser(user)
+    setCpfInput(user.cpf ? formatCPF(user.cpf) : '')
+    setCpfError(null)
+  }
+
+  const handleSaveCpf = async () => {
+    if (!editingCpfUser) return
+    const digits = cleanDigits(cpfInput)
+    if (digits && !validateCPF(digits)) {
+      setCpfError('CPF inválido. Verifique os dígitos.')
+      return
+    }
+
+    setSavingCpf(true)
+    setCpfError(null)
+    try {
+      const updated = await updateUser(editingCpfUser.id, { cpf: digits })
+      refreshOne({ ...editingCpfUser, cpf: updated.cpf ?? digits })
+      toast({
+        title: 'CPF atualizado',
+        description: `CPF de ${editingCpfUser.name || editingCpfUser.email} foi salvo com sucesso.`,
+      })
+      setEditingCpfUser(null)
+    } catch (err: any) {
+      const msg = err?.message || 'Não foi possível atualizar o CPF.'
+      setCpfError(msg)
+      toast({
+        title: 'Erro ao atualizar CPF',
+        description: msg,
+        variant: 'destructive',
+      })
+    } finally {
+      setSavingCpf(false)
+    }
+  }
+
   const filtered = users.filter((u) => {
     const q = search.trim().toLowerCase()
     const matchesSearch =
-      !q || (u.name || '').toLowerCase().includes(q) || (u.email || '').toLowerCase().includes(q)
+      !q ||
+      (u.name || '').toLowerCase().includes(q) ||
+      (u.email || '').toLowerCase().includes(q) ||
+      (u.cpf || '').includes(cleanDigits(q))
     const matchesRole = roleFilter === 'all' || u.role === roleFilter
     return matchesSearch && matchesRole
   })
@@ -269,6 +326,7 @@ export default function AdminUsers() {
                   <TableRow>
                     <TableHead>Nome</TableHead>
                     <TableHead>Email</TableHead>
+                    <TableHead>CPF</TableHead>
                     <TableHead>Telefone</TableHead>
                     <TableHead>Perfil</TableHead>
                     <TableHead>Avaliação</TableHead>
@@ -282,6 +340,21 @@ export default function AdminUsers() {
                     <TableRow key={user.id}>
                       <TableCell className="font-medium">{user.name || '-'}</TableCell>
                       <TableCell className="text-muted-foreground">{user.email}</TableCell>
+                      <TableCell className="text-xs font-mono">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenCpfModal(user)}
+                          className="group inline-flex items-center gap-1 hover:text-primary transition-colors text-left"
+                          title="Clique para editar o CPF"
+                        >
+                          {user.cpf ? (
+                            <span>{formatCPF(user.cpf)}</span>
+                          ) : (
+                            <span className="text-muted-foreground italic">Sem CPF</span>
+                          )}
+                          <Edit2 className="h-3 w-3 opacity-0 group-hover:opacity-100 text-muted-foreground" />
+                        </button>
+                      </TableCell>
                       <TableCell className="text-xs font-mono">
                         {user.phone ? (
                           <span className="flex items-center gap-1 text-slate-700">
@@ -384,6 +457,69 @@ export default function AdminUsers() {
           )}
         </CardContent>
       </Card>
+
+      {/* Edit CPF Dialog */}
+      <Dialog
+        open={!!editingCpfUser}
+        onOpenChange={(o) => {
+          if (!o && !savingCpf) {
+            setEditingCpfUser(null)
+            setCpfError(null)
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Editar CPF do Usuário</DialogTitle>
+            <DialogDescription>
+              Atualize ou preencha o CPF de{' '}
+              <strong>{editingCpfUser?.name || editingCpfUser?.email}</strong>.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="space-y-1">
+              <Label htmlFor="admin_user_cpf">CPF</Label>
+              <Input
+                id="admin_user_cpf"
+                placeholder="000.000.000-00"
+                value={cpfInput}
+                maxLength={14}
+                onChange={(e) => {
+                  setCpfInput(formatCPF(e.target.value))
+                  setCpfError(null)
+                }}
+                disabled={savingCpf}
+                className={cpfError ? 'border-red-500' : ''}
+              />
+              {cpfError && <p className="text-xs text-red-500 font-medium">{cpfError}</p>}
+              <p className="text-xs text-muted-foreground">
+                Deixe em branco se o usuário não possuir CPF.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setEditingCpfUser(null)
+                setCpfError(null)
+              }}
+              disabled={savingCpf}
+            >
+              Cancelar
+            </Button>
+            <Button onClick={handleSaveCpf} disabled={savingCpf}>
+              {savingCpf ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" /> Salvando...
+                </>
+              ) : (
+                'Salvar CPF'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

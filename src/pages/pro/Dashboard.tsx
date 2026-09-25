@@ -39,8 +39,10 @@ import {
   updateJob,
   getUserDocuments,
   createDocument,
+  updateDocument,
   getCancellationsByUser,
   getProPenaltyJobs,
+  getProStatsJobs,
   declineJob,
 } from '@/services/api'
 import { getSettings, DEFAULT_SETTINGS, type PlatformSettings } from '@/services/settings'
@@ -66,16 +68,26 @@ import { useUnreadMessages } from '@/hooks/use-unread-messages'
 import { MessageCircle } from 'lucide-react'
 
 export default function ProDashboard() {
+  const navigate = useNavigate()
+  const { user } = useAuth()
   const [isOnline, setIsOnline] = useState(false)
   const [pendingJob, setPendingJob] = useState<any>(null)
   const [documents, setDocuments] = useState<any[]>([])
   const [uploading, setUploading] = useState(false)
+  const [userProfile, setUserProfile] = useState<any>(user)
   const [completedJobs, setCompletedJobs] = useState<any[]>([])
   const [acceptedJobs, setAcceptedJobs] = useState<any[]>([])
   const [inProgressJobs, setInProgressJobs] = useState<any[]>([])
   const [settings, setSettings] = useState<PlatformSettings>(DEFAULT_SETTINGS)
   const [policy, setPolicy] = useState<CancellationPolicy>(DEFAULT_CANCELLATION_POLICY)
   const [monthlyCancellations, setMonthlyCancellations] = useState(0)
+
+  // Real stats for "Ganhos de Hoje" and "Taxa de Aceitação"
+  const [statsLoading, setStatsLoading] = useState(true)
+  const [statsError, setStatsError] = useState(false)
+  const [todayEarnings, setTodayEarnings] = useState<number | null>(null)
+  const [acceptanceRate, setAcceptanceRate] = useState<number | null>(null)
+  const [offersCount, setOffersCount] = useState<number>(0)
 
   const [cancelJobState, setCancelJobState] = useState<any>(null)
   const [cancelReason, setCancelReason] = useState('')
@@ -84,9 +96,6 @@ export default function ProDashboard() {
   // Outstanding penalty balance + the jobs that generated it (Entrega 2).
   const [penaltyBalance, setPenaltyBalance] = useState(0)
   const [penaltyJobs, setPenaltyJobs] = useState<any[]>([])
-
-  const navigate = useNavigate()
-  const { user } = useAuth()
   const { toast } = useToast()
   const unreadMessages = useUnreadMessages()
 
@@ -102,9 +111,13 @@ export default function ProDashboard() {
 
     try {
       // Platform settings & cancellation policy
-      getSettings()
-        .then(setSettings)
-        .catch(() => {})
+      let loadedSettings = settings
+      try {
+        loadedSettings = await getSettings()
+        setSettings(loadedSettings)
+      } catch {
+        /* intentionally ignored */
+      }
       getCancellationPolicy()
         .then(setPolicy)
         .catch(() => {})
@@ -124,8 +137,10 @@ export default function ProDashboard() {
       let currentPro: any = user
       try {
         currentPro = await pb.collection('users').getOne(user.id)
+        setUserProfile(currentPro)
       } catch {
         currentPro = user
+        setUserProfile(user)
       }
       if (currentPro && currentPro.blocked_until !== blockedUntilRef.current) {
         blockedUntilRef.current = currentPro.blocked_until || ''
@@ -219,6 +234,69 @@ export default function ProDashboard() {
       } catch {
         setPenaltyJobs([])
       }
+
+      // Calculate real stats: "Ganhos de Hoje" & "Taxa de Aceitação"
+      try {
+        setStatsLoading(true)
+        setStatsError(false)
+        const statsJobs = await getProStatsJobs(user.id)
+
+        // Service fee percent (default to 15 if missing)
+        const feePercent =
+          typeof loadedSettings?.service_fee_percent === 'number'
+            ? loadedSettings.service_fee_percent
+            : 15
+        const netMultiplier = Math.max(0, 1 - feePercent / 100)
+
+        // Today's boundaries in local time
+        const startOfDay = new Date()
+        startOfDay.setHours(0, 0, 0, 0)
+        const endOfDay = new Date()
+        endOfDay.setHours(23, 59, 59, 999)
+
+        let sumNetToday = 0
+        let acceptedOffersCount = 0
+        let declinedOffersCount = 0
+
+        for (const j of statsJobs) {
+          // Ganhos de hoje: pro_id = usuário logado, status = 'completed', completed_at de hoje
+          if (j.pro_id === user.id && j.status === 'completed' && j.completed_at) {
+            const completedDate = new Date(j.completed_at)
+            if (completedDate >= startOfDay && completedDate <= endOfDay) {
+              const grossPrice = Number(j.client_price || j.price || 0)
+              sumNetToday += grossPrice * netMultiplier
+            }
+          }
+
+          // Taxa de aceitação:
+          // aceitas = jobs com pro_id = usuário e accepted_at preenchido
+          if (j.pro_id === user.id && j.accepted_at) {
+            acceptedOffersCount++
+          }
+
+          // recusadas = jobs com declined_by contendo usuário
+          if (
+            (Array.isArray(j.declined_by) && j.declined_by.includes(user.id)) ||
+            (typeof j.declined_by === 'string' && j.declined_by.includes(user.id))
+          ) {
+            declinedOffersCount++
+          }
+        }
+
+        setTodayEarnings(sumNetToday)
+        const totalOffers = acceptedOffersCount + declinedOffersCount
+        setOffersCount(totalOffers)
+        if (totalOffers === 0) {
+          setAcceptanceRate(null)
+        } else {
+          setAcceptanceRate(Math.round((acceptedOffersCount / totalOffers) * 100))
+        }
+      } catch (statsErr) {
+        console.warn('[ProDashboard] Erro ao calcular estatísticas do pro:', statsErr)
+        setStatsError(true)
+      } finally {
+        setStatsLoading(false)
+      }
     } catch (err) {
       console.error('[ProDashboard] Falha inesperada em loadData:', err)
       // Never crash the entire screen — ensure fallback empty state
@@ -227,6 +305,8 @@ export default function ProDashboard() {
       setAcceptedJobs([])
       setInProgressJobs([])
       setPendingJob(null)
+      setStatsError(true)
+      setStatsLoading(false)
     }
   }
 
@@ -309,19 +389,35 @@ export default function ProDashboard() {
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.length || !user) return
     setUploading(true)
+    const file = e.target.files[0]
     try {
-      const formData = new FormData()
-      formData.append('user_id', user.id)
-      formData.append('type', 'identity')
-      formData.append('status', 'pending')
-      formData.append('file', e.target.files[0])
-      await createDocument(formData)
-      toast({ title: 'Enviado', description: 'Documento em análise pela equipe.' })
+      const existingDoc =
+        documents.find((d) => d.type === 'identity') || (documents.length > 0 ? documents[0] : null)
+      if (existingDoc?.id) {
+        const formData = new FormData()
+        formData.append('file', file)
+        formData.append('status', 'pending')
+        formData.append('resubmit_count', String(Number(existingDoc.resubmit_count || 0) + 1))
+        formData.append('reviewer_note', '')
+        formData.append('reviewed_at', '')
+        formData.append('reviewed_by', '')
+        await updateDocument(existingDoc.id, formData)
+        toast({ title: 'Reenviado', description: 'Documento atualizado e em análise pela equipe.' })
+      } else {
+        const formData = new FormData()
+        formData.append('user_id', user.id)
+        formData.append('type', 'identity')
+        formData.append('status', 'pending')
+        formData.append('file', file)
+        await createDocument(formData)
+        toast({ title: 'Enviado', description: 'Documento em análise pela equipe.' })
+      }
       loadData()
     } catch (err) {
-      toast({ title: 'Erro', description: 'Falha ao enviar.', variant: 'destructive' })
+      toast({ title: 'Erro', description: 'Falha ao enviar documento.', variant: 'destructive' })
     } finally {
       setUploading(false)
+      if (e.target) e.target.value = ''
     }
   }
 
@@ -374,7 +470,8 @@ export default function ProDashboard() {
     }
   }
 
-  const isSuspended = !!user?.suspended
+  const isSuspended = !!(userProfile?.suspended ?? user?.suspended)
+  const proStatus = userProfile?.status || user?.status
 
   if (isSuspended) {
     return (
@@ -391,7 +488,10 @@ export default function ProDashboard() {
     )
   }
 
-  if (user?.status === 'pending') {
+  // Gate da tela: se a conta do pro já está ativa (status != 'pending' no user),
+  // não mostrar mais a tela de envio de documentos — ir direto para o dashboard normal.
+  if (proStatus === 'pending') {
+    const latestDoc = documents[0]
     return (
       <div className="max-w-md mx-auto mt-10 space-y-6">
         <Alert>
@@ -408,24 +508,30 @@ export default function ProDashboard() {
           <CardContent className="space-y-4">
             <Label>Documento de Identidade (Imagem/PDF)</Label>
             <Input type="file" accept="image/*,.pdf" onChange={handleUpload} disabled={uploading} />
-            {documents.length > 0 && (
+            {latestDoc && (
               <div className="mt-4 pt-4 border-t">
-                <p className="text-sm font-medium flex justify-between">
+                <p className="text-sm font-medium flex justify-between items-center">
                   Status atual:
                   <span
                     className={cn(
-                      'px-2 rounded',
-                      documents[0].status === 'pending'
-                        ? 'bg-yellow-100 text-yellow-800'
-                        : 'bg-red-100 text-red-800',
+                      'px-2 py-0.5 rounded text-xs font-semibold',
+                      latestDoc.status === 'approved'
+                        ? 'bg-green-100 text-green-800'
+                        : latestDoc.status === 'rejected'
+                          ? 'bg-red-100 text-red-800'
+                          : 'bg-yellow-100 text-yellow-800',
                     )}
                   >
-                    {documents[0].status === 'pending' ? 'Em análise' : 'Rejeitado'}
+                    {latestDoc.status === 'approved'
+                      ? 'Aprovado'
+                      : latestDoc.status === 'rejected'
+                        ? 'Rejeitado'
+                        : 'Em análise'}
                   </span>
                 </p>
-                {documents[0].status === 'rejected' && documents[0].reviewer_note && (
+                {latestDoc.status === 'rejected' && latestDoc.reviewer_note && (
                   <p className="text-xs text-muted-foreground mt-2">
-                    <strong>Motivo:</strong> {documents[0].reviewer_note}
+                    <strong>Motivo:</strong> {latestDoc.reviewer_note}
                   </p>
                 )}
               </div>
@@ -718,11 +824,34 @@ export default function ProDashboard() {
           <CardContent className="p-6 flex items-center justify-between">
             <div>
               <p className="text-sm text-muted-foreground font-medium mb-1">Ganhos de Hoje</p>
-              <p className="text-3xl font-bold text-primary">R$ 145,00</p>
+              {statsLoading ? (
+                <div className="flex items-center gap-2 text-primary h-9">
+                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                </div>
+              ) : statsError ? (
+                <p className="text-3xl font-bold text-muted-foreground">—</p>
+              ) : (
+                <p className="text-3xl font-bold text-primary">
+                  {new Intl.NumberFormat('pt-BR', {
+                    style: 'currency',
+                    currency: 'BRL',
+                  }).format(todayEarnings ?? 0)}
+                </p>
+              )}
             </div>
             <div className="text-right">
               <p className="text-sm text-muted-foreground font-medium mb-1">Taxa de Aceitação</p>
-              <p className="text-xl font-bold">98%</p>
+              {statsLoading ? (
+                <div className="flex items-center justify-end h-7">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                </div>
+              ) : statsError ? (
+                <p className="text-xl font-bold text-muted-foreground">—</p>
+              ) : offersCount === 0 || acceptanceRate === null ? (
+                <p className="text-xl font-bold text-muted-foreground">—</p>
+              ) : (
+                <p className="text-xl font-bold">{acceptanceRate}%</p>
+              )}
             </div>
           </CardContent>
         </Card>

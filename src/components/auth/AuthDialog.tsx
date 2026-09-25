@@ -16,6 +16,7 @@ import { useToast } from '@/hooks/use-toast'
 import { getErrorMessage, extractFieldErrors, type FieldErrors } from '@/lib/pocketbase/errors'
 import { Camera, Upload, User } from 'lucide-react'
 import pb from '@/lib/pocketbase/client'
+import { cleanDigits, formatCPF, validateCPF } from '@/services/payouts'
 import { getAvatarUrl } from '@/lib/avatar'
 import { BrandLogo } from '@/components/BrandLogo'
 
@@ -43,6 +44,7 @@ export function AuthDialog({ open, onOpenChange, initialRole = 'client' }: AuthD
   const [formData, setFormData] = useState({
     name: '',
     email: '',
+    cpf: '',
     password: '',
     termsAccepted: false,
   })
@@ -142,6 +144,28 @@ export function AuthDialog({ open, onOpenChange, initialRole = 'client' }: AuthD
     }
   }
 
+  const handleCpfChange = (raw: string) => {
+    const formatted = formatCPF(raw)
+    setFormData((f) => ({ ...f, cpf: formatted }))
+    const digits = cleanDigits(raw)
+    if (digits.length === 11 && !validateCPF(digits)) {
+      setFieldErrors((prev) => ({ ...prev, cpf: 'CPF inválido.' }))
+    } else if (digits.length > 0 && digits.length < 11) {
+      // Still typing
+      setFieldErrors((prev) => {
+        const copy = { ...prev }
+        delete copy.cpf
+        return copy
+      })
+    } else {
+      setFieldErrors((prev) => {
+        const copy = { ...prev }
+        delete copy.cpf
+        return copy
+      })
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (mode === 'forgot') {
@@ -156,6 +180,45 @@ export function AuthDialog({ open, onOpenChange, initialRole = 'client' }: AuthD
       if (mode === 'login') {
         result = await signIn(formData.email, formData.password)
       } else {
+        const cpfDigits = cleanDigits(formData.cpf)
+        if (initialRole === 'pro') {
+          if (!cpfDigits) {
+            setFieldErrors((prev) => ({ ...prev, cpf: 'CPF é obrigatório.' }))
+            toast({
+              title: 'CPF obrigatório',
+              description: 'Informe seu CPF para continuar o cadastro profissional.',
+              variant: 'destructive',
+            })
+            setLoading(false)
+            return
+          }
+          if (!validateCPF(cpfDigits)) {
+            setFieldErrors((prev) => ({
+              ...prev,
+              cpf: 'CPF inválido. Verifique os números digitados.',
+            }))
+            toast({
+              title: 'CPF inválido',
+              description: 'O CPF informado possui dígitos verificadores inválidos.',
+              variant: 'destructive',
+            })
+            setLoading(false)
+            return
+          }
+        } else if (cpfDigits) {
+          // Cliente com CPF preenchido: validação de formato/dígitos
+          if (!validateCPF(cpfDigits)) {
+            setFieldErrors((prev) => ({ ...prev, cpf: 'CPF inválido.' }))
+            toast({
+              title: 'CPF inválido',
+              description: 'O CPF informado é inválido.',
+              variant: 'destructive',
+            })
+            setLoading(false)
+            return
+          }
+        }
+
         if (!formData.termsAccepted) {
           toast({
             title: 'Erro',
@@ -173,6 +236,7 @@ export function AuthDialog({ open, onOpenChange, initialRole = 'client' }: AuthD
           terms_accepted: formData.termsAccepted,
           status: initialRole === 'pro' ? 'pending' : 'active',
           avatar: initialRole === 'pro' ? avatarFile : undefined,
+          cpf: cpfDigits || undefined,
         })
       }
 
@@ -334,6 +398,34 @@ export function AuthDialog({ open, onOpenChange, initialRole = 'client' }: AuthD
                     </p>
                   </div>
                 </div>
+              </div>
+            )}
+
+            {mode === 'signup' && (
+              <div className="space-y-2">
+                <Label htmlFor="cpf">
+                  CPF{' '}
+                  {initialRole === 'pro' ? (
+                    <span className="text-red-500">*</span>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">(opcional)</span>
+                  )}
+                </Label>
+                <Input
+                  id="cpf"
+                  type="text"
+                  inputMode="numeric"
+                  required={initialRole === 'pro'}
+                  placeholder="000.000.000-00"
+                  maxLength={14}
+                  value={formData.cpf}
+                  onChange={(e) => handleCpfChange(e.target.value)}
+                  disabled={loading}
+                  className={fieldErrors.cpf ? 'border-red-500' : ''}
+                />
+                {fieldErrors.cpf && (
+                  <p className="text-xs text-red-500 font-medium">{fieldErrors.cpf}</p>
+                )}
               </div>
             )}
 
