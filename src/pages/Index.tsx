@@ -32,16 +32,18 @@ export default function Index() {
               </div>
               <h1 className="text-4xl md:text-6xl font-bold tracking-tight text-slate-900 dark:text-white mb-6 leading-tight">
                 <span className="text-[#D4A017] dark:text-[#E5B429]">Faltou funcionário?</span>{' '}
-                Temos o profissional certo em{' '}
+                Temos o profissional ideal em{' '}
                 <span className="inline-block">
                   <span className="text-[#0D4F5C] dark:text-[#146C7E]">minutos</span>
                   <span className="text-[#D4A017]">.</span>
                 </span>
               </h1>
               <p className="text-lg md:text-xl text-muted-foreground mb-8 leading-relaxed">
-                Profissionais para o seu hotel ou empresa em minutos. ProFreela conecta você a
-                faxineiras, camareiras, ajudantes e outros profissionais verificados, com pagamento
-                seguro pela plataforma. Agendado ou emergencial, sem burocracia.
+                Profissionais para hotéis, empresas ou até para sua residência.{' '}
+                <strong className="text-[#D4A017] dark:text-[#E5B429]">ProFreela</strong> conecta
+                você a faxineiras, camareiras, ajudantes e outros profissionais verificados, com
+                pagamento seguro pela plataforma. Agende ou contrate para cobertura emergencial, sem
+                burocracia.
               </p>
 
               <div className="flex flex-col sm:flex-row gap-4">
