@@ -9,7 +9,6 @@ import {
   Save,
   SlidersHorizontal,
   Wrench,
-  TrendingUp,
   Gauge,
   Plus,
   Trash2,
@@ -176,8 +175,6 @@ export default function AdminPricing() {
     setSavingSettings(true)
     try {
       const updated = await updateSettings({
-        emergency_margin_percent: settings.emergency_margin_percent,
-        scheduled_margin_percent: settings.scheduled_margin_percent,
         demand_factors: settings.demand_factors,
         price_per_hour: settings.price_per_hour,
         min_hours: settings.min_hours,
@@ -718,48 +715,6 @@ export default function AdminPricing() {
                 </>
               )}
             </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Margins */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <TrendingUp className="h-5 w-5 text-primary" /> Margens por Tipo de Serviço
-          </CardTitle>
-          <CardDescription>
-            Acréscimos percentuais aplicados sobre o preço base conforme o tipo.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-6 md:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="emergency_margin">Margem para serviços emergenciais (%)</Label>
-            <Input
-              id="emergency_margin"
-              type="number"
-              step="0.1"
-              min="0"
-              value={settings.emergency_margin_percent}
-              onChange={(e) => handleNumberChange('emergency_margin_percent', e.target.value)}
-            />
-            <p className="text-xs text-muted-foreground">
-              Acréscimo aplicado sobre serviços sob demanda (tipo Uber).
-            </p>
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="scheduled_margin">Margem para serviços agendados (%)</Label>
-            <Input
-              id="scheduled_margin"
-              type="number"
-              step="0.1"
-              min="0"
-              value={settings.scheduled_margin_percent}
-              onChange={(e) => handleNumberChange('scheduled_margin_percent', e.target.value)}
-            />
-            <p className="text-xs text-muted-foreground">
-              Acréscimo aplicado sobre serviços agendados.
-            </p>
           </div>
         </CardContent>
       </Card>
