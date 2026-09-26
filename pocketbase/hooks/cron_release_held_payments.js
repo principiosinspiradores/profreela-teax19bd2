@@ -61,6 +61,14 @@ cronAdd('release_held_payments', '*/15 * * * *', () => {
     const job = jobs[i]
     const jobId = job.getString('id')
     const intentId = job.getString('payment_intent_id')
+    const pStatus = job.getString('payment_status')
+
+    // Trava de disputa: se o pagamento estiver com disputa aberta (status = 'disputed'),
+    // NÃO liberar o escrow. Pula o job e tenta de novo na próxima execução após resolução.
+    if (pStatus === 'disputed') {
+      console.log('[release_held_payments] job com disputa aberta — pulando liberação:', jobId)
+      continue
+    }
 
     let gatewayOk = true
 

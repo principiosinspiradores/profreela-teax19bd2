@@ -634,11 +634,34 @@ routerAdd('POST', '/backend/v1/payments/dispute-payment', (e) => {
   }
 
   const status = job.getString('payment_status')
-  if (status === 'captured' || status === 'cancelled') {
+  if (status === 'disputed') {
+    return e.json(400, {
+      ok: false,
+      error: 'Já existe uma disputa aberta para este serviço.',
+    })
+  }
+  if (status === 'captured' || status === 'cancelled' || status === 'refunded') {
     return e.json(400, {
       ok: false,
       error: 'Disputa não permitida no status atual: ' + status + '.',
     })
+  }
+
+  // Se o serviço estiver concluído (completed), validar janela de 24h pós-finalização
+  const jobState = job.getString('status')
+  const completedAtStr = job.getString('completed_at')
+  if (jobState === 'completed' && completedAtStr) {
+    const completedAtMs = new Date(completedAtStr).getTime()
+    if (!isNaN(completedAtMs)) {
+      const diffMs = Date.now() - completedAtMs
+      const WINDOW_24H_MS = 24 * 60 * 60 * 1000
+      if (diffMs > WINDOW_24H_MS) {
+        return e.json(400, {
+          ok: false,
+          error: 'A janela de 24h pós-finalização para reportar problemas expirou.',
+        })
+      }
+    }
   }
 
   const nowIso = new Date().toISOString()
@@ -646,6 +669,63 @@ routerAdd('POST', '/backend/v1/payments/dispute-payment', (e) => {
   job.set('payment_disputed_at', nowIso)
   if (reason) job.set('dispute_reason', reason)
   $app.save(job)
+
+  // Notificar admin(s) e o profissional do job sobre a disputa
+  try {
+    const notifCol = $app.findCollectionByNameOrId('notifications')
+    const proId = job.getString('pro_id')
+
+    // 1. Notificar o profissional se atribuído
+    if (proId) {
+      try {
+        const proNotif = new Record(notifCol)
+        proNotif.set('user_id', proId)
+        proNotif.set('type', 'payment')
+        proNotif.set('title', 'Disputa aberta no serviço')
+        proNotif.set(
+          'message',
+          'O cliente reportou um problema no serviço #' +
+            jobId.slice(0, 6) +
+            '. A liberação do pagamento foi retida para análise.',
+        )
+        proNotif.set('job_id', jobId)
+        proNotif.set('read_status', false)
+        $app.save(proNotif)
+      } catch (proErr) {
+        console.log('[dispute-payment] erro ao notificar profissional:', proErr)
+      }
+    }
+
+    // 2. Notificar administradores
+    let adminUsers = []
+    try {
+      adminUsers = $app.findRecordsByFilter('users', "role = 'admin'", '-created', 10, 0)
+    } catch (_) {}
+
+    for (let ai = 0; ai < adminUsers.length; ai++) {
+      const adminId = adminUsers[ai].getString('id')
+      if (!adminId) continue
+      try {
+        const adminNotif = new Record(notifCol)
+        adminNotif.set('user_id', adminId)
+        adminNotif.set('type', 'system')
+        adminNotif.set('title', 'Nova disputa aberta')
+        adminNotif.set(
+          'message',
+          'Uma disputa foi aberta para o serviço #' +
+            jobId.slice(0, 6) +
+            (reason ? ' — Motivo: ' + reason : ''),
+        )
+        adminNotif.set('job_id', jobId)
+        adminNotif.set('read_status', false)
+        $app.save(adminNotif)
+      } catch (admErr) {
+        console.log('[dispute-payment] erro ao notificar admin:', admErr)
+      }
+    }
+  } catch (notifErr) {
+    console.log('[dispute-payment] erro geral nas notificações de disputa:', notifErr)
+  }
 
   return e.json(200, {
     ok: true,

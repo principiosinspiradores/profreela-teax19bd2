@@ -470,6 +470,16 @@ export default function ClientDashboard() {
             {completedJobs.map((job) => {
               const reviewed = reviewedJobIds.has(job.id)
               const hasPro = !!(job.expand?.pro_id || job.pro_id)
+
+              // Janela de disputa pós-finalização de 24h
+              const completedAtMs = job.completed_at ? new Date(job.completed_at).getTime() : 0
+              const isWithin24h =
+                completedAtMs > 0 &&
+                !isNaN(completedAtMs) &&
+                Date.now() - completedAtMs < 24 * 60 * 60 * 1000
+              const hasNoOpenDispute = job.payment_status !== 'disputed'
+              const canDispute = isWithin24h && hasNoOpenDispute
+
               return (
                 <Card key={job.id}>
                   <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -483,17 +493,30 @@ export default function ClientDashboard() {
                         {' · ' + job.address}
                       </p>
                     </div>
-                    {hasPro && (
-                      <Button
-                        size="sm"
-                        variant={reviewed ? 'outline' : 'default'}
-                        disabled={reviewed}
-                        onClick={() => setReviewJob(job)}
-                      >
-                        <Star className="h-4 w-4 mr-1" />
-                        {reviewed ? 'Avaliado' : 'Avalie o Profissional'}
-                      </Button>
-                    )}
+                    <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                      {canDispute && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-amber-700 border-amber-300 hover:bg-amber-50 gap-1"
+                          onClick={() => setDisputeJob(job)}
+                        >
+                          <AlertTriangle className="h-4 w-4" />
+                          Reportar problema
+                        </Button>
+                      )}
+                      {hasPro && (
+                        <Button
+                          size="sm"
+                          variant={reviewed ? 'outline' : 'default'}
+                          disabled={reviewed}
+                          onClick={() => setReviewJob(job)}
+                        >
+                          <Star className="h-4 w-4 mr-1" />
+                          {reviewed ? 'Avaliado' : 'Avalie o Profissional'}
+                        </Button>
+                      )}
+                    </div>
                   </CardContent>
                 </Card>
               )

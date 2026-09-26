@@ -9,12 +9,13 @@ import {
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Download, Star, Phone } from 'lucide-react'
+import { Download, Star, Phone, AlertTriangle } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
 import { getClientJobs } from '@/services/api'
 import { getReviewsByAuthor, type Review } from '@/services/reviews'
 import { RatingStars } from '@/components/RatingStars'
 import { ReviewDialog } from '@/components/ReviewDialog'
+import { DisputeDialog } from '@/components/DisputeDialog'
 import { format } from 'date-fns'
 import { PaymentStatusBadge } from '@/components/PaymentStatusBadge'
 import { getProPhoneForClient, canClientViewRealPhone } from '@/lib/phone'
@@ -24,6 +25,7 @@ export default function ClientHistory() {
   const [jobs, setJobs] = useState<any[]>([])
   const [reviewsByJob, setReviewsByJob] = useState<Record<string, Review>>({})
   const [reviewJob, setReviewJob] = useState<any>(null)
+  const [disputeJob, setDisputeJob] = useState<any>(null)
 
   const load = () => {
     if (!user) return
@@ -73,6 +75,17 @@ export default function ClientHistory() {
               const review = reviewsByJob[job.id]
               const reviewed = !!review
               const canReview = job.status === 'completed' && (job.expand?.pro_id || job.pro_id)
+
+              // Janela de disputa pós-finalização de 24h
+              const isCompleted = job.status === 'completed'
+              const completedAtMs = job.completed_at ? new Date(job.completed_at).getTime() : 0
+              const isWithin24h =
+                isCompleted &&
+                completedAtMs > 0 &&
+                !isNaN(completedAtMs) &&
+                Date.now() - completedAtMs < 24 * 60 * 60 * 1000
+              const hasNoOpenDispute = job.payment_status !== 'disputed'
+              const canDispute = isWithin24h && hasNoOpenDispute
               return (
                 <TableRow key={job.id}>
                   <TableCell className="font-medium">#{job.id.slice(0, 6)}</TableCell>
@@ -156,6 +169,18 @@ export default function ClientHistory() {
                       >
                         <Download className="h-4 w-4" />
                       </Button>
+                      {canDispute && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-amber-700 border-amber-300 hover:bg-amber-50 h-8 px-2 text-xs gap-1"
+                          title="Reportar problema dentro da janela de 24h"
+                          onClick={() => setDisputeJob(job)}
+                        >
+                          <AlertTriangle className="h-3.5 w-3.5" />
+                          Reportar problema
+                        </Button>
+                      )}
                     </div>
                   </TableCell>
                 </TableRow>
@@ -177,6 +202,13 @@ export default function ClientHistory() {
         open={!!reviewJob}
         onOpenChange={(o) => !o && setReviewJob(null)}
         onReviewed={load}
+      />
+
+      <DisputeDialog
+        jobId={disputeJob?.id ?? null}
+        open={!!disputeJob}
+        onOpenChange={(o) => !o && setDisputeJob(null)}
+        onDisputed={load}
       />
     </div>
   )
