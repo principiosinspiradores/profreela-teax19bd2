@@ -433,16 +433,18 @@ export default function ClientDashboard() {
                           )}
                       </div>
                     )}{' '}
-                    {job.payment_status === 'held' && (
+                    {(job.payment_status === 'held' || job.payment_status === 'authorized') && (
                       <div className="flex items-center gap-2 mt-3">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="text-amber-700 border-amber-300"
-                          onClick={() => setDisputeJob(job)}
-                        >
-                          <AlertTriangle className="h-4 w-4 mr-1" /> Reportar Problema
-                        </Button>
+                        {job.payment_status === 'held' && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-amber-700 border-amber-300"
+                            onClick={() => setDisputeJob(job)}
+                          >
+                            <AlertTriangle className="h-4 w-4 mr-1" /> Reportar Problema
+                          </Button>
+                        )}
                       </div>
                     )}
                   </div>

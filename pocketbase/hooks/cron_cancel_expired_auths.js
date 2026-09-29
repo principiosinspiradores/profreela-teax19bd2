@@ -1,10 +1,12 @@
 // Cron job: auto-cancel expired pre-authorizations / refund expired payments.
 //
-// When a professional accepts a service, the client's card is pre-authorized
-// (payment_status = 'authorized'). The pro must clock in within a configurable
-// deadline (settings.clock_in_deadline_hours, default 24h). If the deadline
-// passes without a clock-in, the pre-authorization is cancelled / refunded
-// automatically and the job is marked cancelled.
+// Covers two cases:
+// 1. Pre-auth created at checkout (payment_status = 'authorized' && status = 'pending')
+//    where no pro has accepted within 7 days (or gateway pre-auth limit).
+//    The pre-auth is cancelled on the gateway, status marked cancelled ('expired_unaccepted'),
+//    and customer is notified.
+// 2. Post-acceptance clock-in deadline: pro accepted (accepted_at != ''), but didn't
+//    clock in within settings.clock_in_deadline_hours (default 24h).
 //
 // Runs every 15 minutes: */15 * * * *
 //
@@ -15,7 +17,7 @@
 // callback — top-level helpers/variables are NOT accessible at runtime.
 
 cronAdd('cancel_expired_auths', '*/15 * * * *', () => {
-  // --- read the clock-in deadline from the single settings row -------------
+  // --- read settings (inlined) ---------------------------------------------
   let clockInHours = 24
   try {
     const rows = $app.findRecordsByFilter('settings', '1=1', '', 1, 0)
@@ -25,18 +27,38 @@ cronAdd('cancel_expired_auths', '*/15 * * * *', () => {
     }
   } catch (_) {}
 
-  // --- find authorized jobs whose clock-in deadline has passed -------------
-  // payment_status = 'authorized' && clocked_in_at empty && accepted_at present
-  // && accepted_at <= (now - deadline)
-  const cutoff = new Date(Date.now() - clockInHours * 3600 * 1000).toISOString()
-  const filter =
+  const nowMs = Date.now()
+  const cutoffClockIn = new Date(nowMs - clockInHours * 3600 * 1000).toISOString()
+  // 7 days pre-auth validity limit for unaccepted pending jobs (Mercado Pago limit is 7 days)
+  const cutoffPendingAuth = new Date(nowMs - 7 * 24 * 3600 * 1000).toISOString()
+
+  // 1. Accepted jobs that missed clock-in deadline
+  const filterAcceptedMissedClockIn =
     "payment_status = 'authorized' && clocked_in_at = '' && accepted_at != '' && accepted_at <= '" +
-    cutoff +
+    cutoffClockIn +
     "'"
+
+  // 2. Pending jobs with authorized payment older than 7 days (created <= now - 7 days)
+  const filterPendingExpiredAuth =
+    "status = 'pending' && payment_status = 'authorized' && created <= '" + cutoffPendingAuth + "'"
 
   let jobs = []
   try {
-    jobs = $app.findRecordsByFilter('jobs', filter, '-accepted_at', 100, 0)
+    const acceptedJobs = $app.findRecordsByFilter(
+      'jobs',
+      filterAcceptedMissedClockIn,
+      '-accepted_at',
+      100,
+      0,
+    )
+    const pendingExpiredJobs = $app.findRecordsByFilter(
+      'jobs',
+      filterPendingExpiredAuth,
+      '-created',
+      100,
+      0,
+    )
+    jobs = acceptedJobs.concat(pendingExpiredJobs)
   } catch (err) {
     console.log('[cron_cancel_expired_auths] erro ao buscar jobs:', err)
     return
@@ -266,6 +288,12 @@ cronAdd('cancel_expired_auths', '*/15 * * * *', () => {
           }
         }
       }
+    } else {
+      // Demo mode
+      logPaymentEvent(jobId, intentId, 'refund', 'cancelled', {
+        provider: 'demo',
+        source: 'cron_cancel_expired_auths',
+      })
     }
 
     if (!gatewayOk) {
@@ -276,13 +304,37 @@ cronAdd('cancel_expired_auths', '*/15 * * * *', () => {
     // --- persist cancelled state on the job --------------------------------
     try {
       job.set('payment_status', targetPaymentStatus)
-      // If the service is still pre-clock-in, mark it cancelled too.
       const jobStatus = job.getString('status')
       if (jobStatus === 'accepted' || jobStatus === 'pending') {
         job.set('status', 'cancelled')
+        if (jobStatus === 'pending') {
+          job.set('cancellation_reason', 'expired_auth_no_acceptance')
+          job.set('cancelled_at', nowIso)
+        }
       }
       $app.save(job)
       cancelled++
+
+      // Se era pending, notificar cliente que a pré-autorização expirou
+      if (jobStatus === 'pending') {
+        const customerId = job.getString('customer_id')
+        if (customerId) {
+          try {
+            const notifCol = $app.findCollectionByNameOrId('notifications')
+            const n = new Record(notifCol)
+            n.set('user_id', customerId)
+            n.set('type', 'system')
+            n.set('title', 'Reserva de pagamento expirada')
+            n.set(
+              'message',
+              'Sua pré-autorização de pagamento expirou sem aceitação de profissional. Nenhuma cobrança foi efetuada e a reserva no cartão foi cancelada.',
+            )
+            n.set('job_id', jobId)
+            n.set('read_status', false)
+            $app.save(n)
+          } catch (_) {}
+        }
+      }
       console.log(
         '[cron_cancel_expired_auths] pré-autorização cancelada/reembolsada — job',
         jobId,

@@ -253,16 +253,15 @@ export default function RequestService() {
     }
   }
 
-  // Called by the Checkout modal once the payment has been confirmed (or
-  // simulated in demo mode). Creates the N jobs (one per requested pro), each
-  // born with payment_status='held' thanks to the payment_intent_id that the
-  // create-split endpoint stamped. ProAccountId is empty: in the pay-at-request
-  // flow the client pays before any pro has accepted, so the split destination
-  // is finalized when the payment is released.
+  // Called by the Checkout modal once the pre-authorization has been confirmed
+  // (or simulated in demo mode). Creates the N jobs (one per requested pro), each
+  // born with payment_status='authorized' thanks to the payment_intent_id that the
+  // create-split endpoint stamped. The charge is captured only when a professional
+  // accepts the job.
   const createJobsAfterPayment = async (paymentResult: any) => {
     if (!pendingPayload || !user) return
     const intentId = paymentResult?.payment_intent_id || paymentResult?.id || ''
-    const payload = { ...pendingPayload, payment_status: 'held', payment_intent_id: intentId }
+    const payload = { ...pendingPayload, payment_status: 'authorized', payment_intent_id: intentId }
     try {
       const tasks = Array.from({ length: quantityClamped }, () => createJob(payload))
       await Promise.all(tasks)
@@ -290,8 +289,8 @@ export default function RequestService() {
         title: 'Solicitação Criada!',
         description:
           (quantityClamped > 1
-            ? `${quantityClamped} solicitações criadas com pagamento garantido. Buscando profissionais...`
-            : 'Pagamento confirmado! Buscando o melhor profissional na sua região...') +
+            ? `${quantityClamped} solicitações criadas com cobrança autorizada. Buscando profissionais...`
+            : 'Pagamento pré-autorizado! Você só será cobrado quando um profissional aceitar.') +
           slotSummary,
         className: 'bg-primary text-white border-none',
       })
@@ -300,8 +299,8 @@ export default function RequestService() {
       navigate('/client')
     } catch (err) {
       toast({
-        title: 'Pagamento confirmado, mas houve um erro ao criar a solicitação',
-        description: 'Entre em contato com o suporte. O valor pago será reembolsado.',
+        title: 'Pré-autorização confirmada, mas houve um erro ao criar a solicitação',
+        description: 'Entre em contato com o suporte. A reserva no seu cartão foi cancelada.',
         variant: 'destructive',
       })
     }
@@ -626,26 +625,26 @@ export default function RequestService() {
         </div>
       </form>
 
-      {/* Payment-at-request (escrow) modal. Opens AFTER the form is validated
-          but BEFORE the job is created. The job is only created (with
-          payment_status='held') once the payment is confirmed. */}
+      {/* Pre-auth modal. Opens AFTER the form is validated
+          but BEFORE the job is created. The job is created with
+          payment_status='authorized' once the pre-auth is confirmed. */}
       <Dialog open={checkoutOpen} onOpenChange={setCheckoutOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Confirmar e pagar</DialogTitle>
+            <DialogTitle>Autorizar pagamento</DialogTitle>
             <DialogDescription>
               {quantityClamped > 1
-                ? `Você está prestes a pagar ${quantityClamped} solicitações de R$ ${unitPrice.toFixed(2)} cada. `
-                : 'Você está prestes a pagar pela sua solicitação. '}
-              O valor fica em garantia com a plataforma e só é liberado ao profissional 24h após a
-              conclusão do serviço.
+                ? `Você está autorizando a cobrança para ${quantityClamped} solicitações de R$ ${unitPrice.toFixed(2)} cada. `
+                : 'Você autoriza a cobrança agora, mas só é cobrado quando um profissional aceita o serviço. '}
+              Se nenhum profissional aceitar dentro do prazo, a reserva é cancelada automaticamente
+              sem custo.
             </DialogDescription>
           </DialogHeader>
           <Checkout
             amount={totalPrice}
             description={`Serviço ProFreela — ${activeService?.name ?? ''}`}
             onPaid={createJobsAfterPayment}
-            confirmLabel="Pagar e solicitar"
+            confirmLabel="Autorizar e solicitar"
           />
         </DialogContent>
       </Dialog>

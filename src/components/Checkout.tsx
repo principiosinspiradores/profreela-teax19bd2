@@ -203,14 +203,15 @@ export function Checkout({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-5">
-        {/* Escrow notice */}
+        {/* Pre-auth & Escrow notice */}
         <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-xs text-emerald-900 flex gap-2">
           <Lock className="h-4 w-4 mt-0.5 shrink-0" />
           <div>
-            <strong>Pagamento em garantia (escrow).</strong> O valor é cobrado agora e mantido pela
-            plataforma. O profissional só recebe após a conclusão do serviço, com uma garantia de{' '}
-            {guaranteeDays === 1 ? '24h' : `${guaranteeDays} dias`} para contestação. Se o serviço
-            for cancelado antes da conclusão, o valor é reembolsado automaticamente.
+            <strong>Pré-autorização segura.</strong> Você autoriza a cobrança agora, mas só é
+            cobrado quando um profissional aceita o serviço. O valor então fica retido em garantia e
+            só é repassado após a conclusão, com{' '}
+            {guaranteeDays === 1 ? '24h' : `${guaranteeDays} dias`} de garantia para contestação. Se
+            nenhum profissional aceitar dentro do prazo, a reserva é cancelada sem custos.
           </div>
         </div>
 
@@ -286,7 +287,10 @@ export function Checkout({
               <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
               <div>
                 <strong className="block font-semibold">Modo demonstração</strong>
-                <span>Nenhuma cobrança real será feita no cartão informado.</span>
+                <span>
+                  Simulação de pré-autorização ativa. Nenhuma cobrança real será feita no cartão
+                  informado e a captura simulada ocorre quando o profissional aceitar.
+                </span>
               </div>
             </div>
 
@@ -341,7 +345,7 @@ export function Checkout({
                 </>
               ) : (
                 <>
-                  <Lock className="h-4 w-4 mr-2" /> {confirmLabel || 'Pagar e solicitar'} R${' '}
+                  <Lock className="h-4 w-4 mr-2" /> {confirmLabel || 'Autorizar e solicitar'} R${' '}
                   {amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                 </>
               )}
@@ -366,7 +370,7 @@ export function Checkout({
         )}
 
         <p className="text-xs text-center text-muted-foreground flex items-center justify-center gap-1">
-          <Clock className="h-3 w-3" /> Valor liberado ao profissional{' '}
+          <Clock className="h-3 w-3" /> Cobrado apenas na aceitação do profissional. Repasse{' '}
           {guaranteeDays === 1 ? '24h' : `${guaranteeDays} dias`} após a conclusão do serviço.
         </p>
       </CardContent>

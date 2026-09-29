@@ -178,10 +178,10 @@ export async function getCheckoutPreview(amount: number, currency = 'brl') {
 
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Pendente',
-  authorized: 'Pré-autorizado',
-  held: 'Em garantia',
-  released: 'Liberado',
-  captured: 'Capturado',
+  authorized: 'Aguardando pro (autorizado)',
+  held: 'Retido em garantia',
+  released: 'Liberado ao pro',
+  captured: 'Retido em garantia',
   disputed: 'Em disputa',
   cancelled: 'Cancelado',
   refunded: 'Reembolsado',

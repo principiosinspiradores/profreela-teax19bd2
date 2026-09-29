@@ -444,10 +444,12 @@ export default function ProDashboard() {
       navigate(`/pro/job/${pendingJob.id}`)
     } catch (err) {
       // 409 → scheduling conflict; 400 → missing scheduled date/duration;
-      // 403 → pro is blocked from accepting (24h cooldown after cancelling).
+      // 403 → pro is blocked from accepting (24h cooldown after cancelling);
+      // 402 → payment capture failed (expired auth / card issue).
       const isConflict = err instanceof ClientResponseError && err.status === 409
       const isIncomplete = err instanceof ClientResponseError && err.status === 400
       const isBlockedErr = err instanceof ClientResponseError && err.status === 403
+      const isPaymentError = err instanceof ClientResponseError && err.status === 402
       const description = isConflict
         ? getErrorMessage(err) ||
           'Você já tem um serviço agendado para este horário. Conclua ou cancele o serviço atual antes de aceitar outro.'
@@ -457,7 +459,10 @@ export default function ProDashboard() {
           : isBlockedErr
             ? getErrorMessage(err) ||
               'Você está temporariamente bloqueado por ter cancelado um serviço.'
-            : 'Não foi possível aceitar a solicitação.'
+            : isPaymentError
+              ? getErrorMessage(err) ||
+                'Não foi possível capturar o pagamento pré-autorizado. O serviço foi reaberto para novas ofertas.'
+              : 'Não foi possível aceitar a solicitação.'
       toast({
         title: isConflict
           ? 'Conflito de horário'
@@ -465,10 +470,17 @@ export default function ProDashboard() {
             ? 'Dados incompletos'
             : isBlockedErr
               ? 'Bloqueado'
-              : 'Erro',
+              : isPaymentError
+                ? 'Falha no pagamento'
+                : 'Erro',
         description,
         variant: 'destructive',
       })
+      // Se deu falha de pagamento ou conflito, recarregar a lista de ofertas
+      if (isPaymentError || isConflict) {
+        setPendingJob(null)
+        loadData()
+      }
       // Refresh the pro record so the block banner shows up immediately.
       if (isBlockedErr) {
         loadData()
@@ -943,7 +955,7 @@ export default function ProDashboard() {
                           <strong>{formatGuaranteeCountdown(remaining)}</strong>
                         </p>
                       ) : job.payment_status === 'held' ? (
-                        <p className="text-xs text-green-700">Pronto para captura</p>
+                        <p className="text-xs text-green-700">Pronto para liberação</p>
                       ) : job.payment_status === 'disputed' ? (
                         <p className="text-xs text-red-700">Liberação pausada (disputa)</p>
                       ) : (

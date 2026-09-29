@@ -70,6 +70,12 @@ export function PaymentStatusBadge({
         <Icon className="h-3 w-3" />
         {paymentStatusLabel(status)}
       </Badge>
+      {status === 'authorized' && (
+        <span className="text-xs text-blue-700 flex items-center gap-1">
+          <ShieldCheck className="h-3 w-3" />
+          Cobrança na aceitação
+        </span>
+      )}
       {status === 'held' && remaining > 0 && (
         <span className="text-xs text-amber-700 flex items-center gap-1">
           <Clock className="h-3 w-3" />
@@ -79,7 +85,7 @@ export function PaymentStatusBadge({
       {status === 'held' && remaining <= 0 && (role === undefined || role === 'pro') && (
         <span className="text-xs text-green-700 flex items-center gap-1">
           <CheckCircle2 className="h-3 w-3" />
-          Pronto para captura
+          Pronto para liberação
         </span>
       )}
       {status === 'disputed' && <span className="text-xs text-red-700">Liberação pausada</span>}

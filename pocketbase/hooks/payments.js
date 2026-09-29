@@ -145,7 +145,7 @@ routerAdd('POST', '/backend/v1/payments/create-split', (e) => {
       currency +
       '&description=' +
       encodeURIComponent(description) +
-      '&capture_method=automatic' +
+      '&capture_method=manual' +
       '&application_fee_amount=' +
       feeAmountCents
     if (proAccountId) {
@@ -164,9 +164,10 @@ routerAdd('POST', '/backend/v1/payments/create-split', (e) => {
     providerResponse = res.json || {}
     if (res.statusCode >= 200 && res.statusCode < 300 && providerResponse.id) {
       intentId = providerResponse.id
-      logPaymentEvent(jobId, intentId, 'create', providerResponse.status || 'succeeded', {
+      logPaymentEvent(jobId, intentId, 'create', providerResponse.status || 'requires_capture', {
         provider: 'stripe',
         amount: amount,
+        capture_method: 'manual',
       })
     } else {
       logPaymentEvent(jobId, '', 'error', 'failed', {
@@ -185,7 +186,7 @@ routerAdd('POST', '/backend/v1/payments/create-split', (e) => {
     const payload = {
       transaction_amount: amount,
       description: description,
-      capture: true,
+      capture: false,
       installments: installments,
       statement_descriptor: 'PROFREELA',
     }
@@ -219,8 +220,9 @@ routerAdd('POST', '/backend/v1/payments/create-split', (e) => {
     if (res.statusCode >= 200 && res.statusCode < 300 && providerResponse.id) {
       intentId = String(providerResponse.id)
 
-      // CRÍTICO: Exigir status === 'approved' para considerar sucesso
-      if (mpStatus !== 'approved') {
+      // Com capture:false, Mercado Pago retorna status === 'authorized'
+      // Também aceitamos 'approved' caso o gateway autorize e aprove
+      if (mpStatus !== 'authorized' && mpStatus !== 'approved') {
         // Recusado, pendente ou cancelado
         logPaymentEvent(jobId, intentId, 'error', mpStatus, {
           provider: 'mercadopago',
@@ -238,13 +240,14 @@ routerAdd('POST', '/backend/v1/payments/create-split', (e) => {
         })
       }
 
-      // Status é 'approved'! Registrar evento de sucesso
+      // Status é 'authorized' ou 'approved'! Registrar evento de pré-autorização
       logPaymentEvent(jobId, intentId, 'create', mpStatus, {
         provider: 'mercadopago',
         amount: amount,
         installments: installments,
         payment_method_id: paymentMethodId || providerResponse.payment_method_id,
         status_detail: providerResponse.status_detail,
+        capture: false,
       })
     } else {
       // Erro HTTP do Mercado Pago
@@ -277,7 +280,7 @@ routerAdd('POST', '/backend/v1/payments/create-split', (e) => {
 
     // Demo mode: synthesize a realistic intent id.
     intentId = 'pi_demo_' + $security.randomString(16)
-    logPaymentEvent(jobId, intentId, 'create', 'approved', {
+    logPaymentEvent(jobId, intentId, 'create', 'authorized', {
       provider: 'demo',
       amount: amount,
       installments: installments,
@@ -285,14 +288,14 @@ routerAdd('POST', '/backend/v1/payments/create-split', (e) => {
     })
   }
 
-  // Persist the held (escrow) state and audit data on the job (if a jobId was provided).
+  // Persist the pre-auth (authorized) state and audit data on the job (if a jobId was provided).
   if (jobId) {
     let job = null
     try {
       job = $app.findFirstRecordByData('jobs', 'id', jobId)
     } catch (_) {}
     if (job) {
-      job.set('payment_status', 'held')
+      job.set('payment_status', 'authorized')
       job.set('payment_intent_id', intentId)
       job.set('payment_authorized_at', nowIso)
       if (paymentMethodId) {
@@ -310,7 +313,7 @@ routerAdd('POST', '/backend/v1/payments/create-split', (e) => {
   return e.json(200, {
     ok: true,
     demo: provider === '',
-    payment_status: 'held',
+    payment_status: 'authorized',
     payment_intent_id: intentId,
     authorized_at: nowIso,
     split: {
@@ -320,7 +323,7 @@ routerAdd('POST', '/backend/v1/payments/create-split', (e) => {
       pro_amount: (Math.round(amount * 100) - feeAmountCents) / 100,
       fee_percent: feePercent,
       min_fee: minFee,
-      capture_method: 'automatic',
+      capture_method: 'manual',
     },
   })
 })
@@ -531,14 +534,14 @@ routerAdd('POST', '/backend/v1/payments/capture-split', (e) => {
     })
   }
 
-  job.set('payment_status', 'captured')
+  job.set('payment_status', 'held')
   job.set('payment_released_at', nowIso)
   $app.save(job)
 
   return e.json(200, {
     ok: true,
     demo: provider === '',
-    payment_status: 'captured',
+    payment_status: 'held',
     payment_intent_id: intentId,
     released_at: nowIso,
     split: {
@@ -1093,9 +1096,23 @@ routerAdd('POST', '/backend/v1/payments/webhook', (e) => {
 
       if (mpStatus === 'approved') {
         // approved + job held/authorized -> nada a forçar (fluxo normal segue)
-        // se estava pendente e não held, pode ser atualizado para held
+        // se estava pendente sem status, marcar authorized
         if (curJobPaymentStatus === 'pending' || !curJobPaymentStatus) {
-          job.set('payment_status', 'held')
+          job.set('payment_status', 'authorized')
+          if (!job.getString('payment_authorized_at')) {
+            job.set('payment_authorized_at', new Date().toISOString())
+          }
+          jobChanged = true
+        }
+      } else if (mpStatus === 'authorized') {
+        // Status oficial de pre-auth no Mercado Pago
+        if (
+          curJobPaymentStatus !== 'authorized' &&
+          curJobPaymentStatus !== 'held' &&
+          curJobPaymentStatus !== 'captured' &&
+          curJobPaymentStatus !== 'released'
+        ) {
+          job.set('payment_status', 'authorized')
           if (!job.getString('payment_authorized_at')) {
             job.set('payment_authorized_at', new Date().toISOString())
           }

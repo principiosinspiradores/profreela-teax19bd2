@@ -121,8 +121,10 @@ cronAdd('cancel_stale_pending', '*/5 * * * *', () => {
     const wasReopened = job.getBool('reopened')
     const originalPaymentStatus = job.getString('payment_status')
     const hadHeldPayment = originalPaymentStatus === 'held'
+    const hadAuthorizedPayment = originalPaymentStatus === 'authorized'
+    const intentId = job.getString('payment_intent_id')
 
-    // 1. Mark cancelled
+    // 1. Mark cancelled and cancel pre-auth on gateway if authorized
     try {
       job.set('status', 'cancelled')
       job.set('cancellation_reason', 'expired_no_acceptance')
@@ -130,6 +132,47 @@ cronAdd('cancel_stale_pending', '*/5 * * * *', () => {
       job.set('cancelled_at', nowIso)
       if (hadHeldPayment) {
         job.set('payment_status', 'refunded')
+      } else if (hadAuthorizedPayment) {
+        job.set('payment_status', 'cancelled')
+        // Cancel authorization on gateway if was not reopened
+        if (intentId) {
+          const provider = $os.getenv('PAYMENT_PROVIDER') || ''
+          if (provider === 'mercadopago') {
+            const accessToken = $os.getenv('MERCADOPAGO_ACCESS_TOKEN') || ''
+            if (accessToken) {
+              try {
+                $http.send({
+                  url: 'https://api.mercadopago.com/v1/payments/' + encodeURIComponent(intentId),
+                  method: 'PUT',
+                  headers: {
+                    Authorization: 'Bearer ' + accessToken,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({ status: 'cancelled' }),
+                  timeout: 15,
+                })
+              } catch (_) {}
+            }
+          } else if (provider === 'stripe') {
+            const secretKey = $os.getenv('STRIPE_SECRET_KEY') || ''
+            if (secretKey) {
+              try {
+                $http.send({
+                  url:
+                    'https://api.stripe.com/v1/payment_intents/' +
+                    encodeURIComponent(intentId) +
+                    '/cancel',
+                  method: 'POST',
+                  headers: {
+                    Authorization: 'Bearer ' + secretKey,
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                  },
+                  timeout: 15,
+                })
+              } catch (_) {}
+            }
+          }
+        }
       }
       $app.save(job)
       cancelledCount++
@@ -144,6 +187,8 @@ cronAdd('cancel_stale_pending', '*/5 * * * *', () => {
     let notifMsg = 'Nenhum profissional aceitou a sua solicitação de ' + svcName + ' a tempo.'
     if (hadHeldPayment) {
       notifMsg += ' O valor retido foi reembolsado integralmente.'
+    } else if (hadAuthorizedPayment) {
+      notifMsg += ' A pré-autorização no seu cartão foi cancelada sem cobrança.'
     }
     if (wasReopened) {
       notifMsg +=
@@ -175,11 +220,15 @@ cronAdd('cancel_stale_pending', '*/5 * * * *', () => {
         const hours = job.getFloat('hours')
         newJob.set('hours', hours > 0 ? hours : 1)
 
-        // If the original was refunded or held, the new emergency job carries 'held' with the same intent
-        newJob.set(
-          'payment_status',
-          hadHeldPayment || originalPaymentStatus === 'refunded' ? 'held' : originalPaymentStatus,
-        )
+        // If the original was refunded or held, the new emergency job carries 'held' with the same intent.
+        // If it was authorized, carry over 'authorized' so the new job can be captured on acceptance.
+        let newPaymentStatus = originalPaymentStatus
+        if (hadHeldPayment || originalPaymentStatus === 'refunded') {
+          newPaymentStatus = 'held'
+        } else if (hadAuthorizedPayment || originalPaymentStatus === 'cancelled') {
+          newPaymentStatus = 'authorized'
+        }
+        newJob.set('payment_status', newPaymentStatus)
         newJob.set('payment_intent_id', job.getString('payment_intent_id'))
         newJob.set('payment_authorized_at', job.getString('payment_authorized_at'))
         newJob.set('reopened', true)

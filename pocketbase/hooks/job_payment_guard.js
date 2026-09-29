@@ -82,9 +82,9 @@ onRecordCreateRequest((e) => {
   const requested = record.getString('payment_status')
   const intentId = record.getString('payment_intent_id')
 
-  if (requested === 'held' && intentId) {
-    // Valid paid-at-request creation: allow it, and stamp the authorized time
-    // if the client didn't provide one.
+  if ((requested === 'authorized' || requested === 'held') && intentId) {
+    // Valid pre-auth creation (or held for backwards compatibility): allow it,
+    // and stamp the authorized time if the client didn't provide one.
     if (!record.getString('payment_authorized_at')) {
       record.set('payment_authorized_at', new Date().toISOString())
     }
@@ -92,13 +92,13 @@ onRecordCreateRequest((e) => {
     return
   }
 
-  // Any other client-supplied payment_status (released, captured, refunded,
-  // authorized, ...) is not allowed from a client create. Strip it so the job
-  // is created unpaid — the client cannot self-release funds.
+  // Any other client-supplied payment_status (released, captured, refunded, ...)
+  // is not allowed from a client create. Strip it so the job is created unpaid —
+  // the client cannot self-release funds.
   if (requested) {
     record.set('payment_status', '')
   }
-  if (intentId && requested !== 'held') {
+  if (intentId && requested !== 'authorized' && requested !== 'held') {
     record.set('payment_intent_id', '')
   }
 

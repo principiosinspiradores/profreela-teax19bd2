@@ -131,5 +131,276 @@ onRecordUpdateRequest((e) => {
     }
   }
 
+  // --- CAPTURA DO PAGAMENTO NA ACEITAÇÃO DO PRO ---------------------------
+  // O job foi pré-autorizado no checkout (payment_status = 'authorized').
+  // Ao aceitar, capturar a pré-autorização na operadora (Mercado Pago / Stripe / Demo).
+  // Se a captura tiver sucesso: payment_status passa para 'held'.
+  // Se a captura falhar (expirada, limite indisponível, etc):
+  //   - O job NÃO fica com o pro (pro_id removido, status volta a 'pending' ou cancelado)
+  //   - A reserva é cancelada se necessário
+  //   - Registra payment_event do erro
+  //   - Notifica o admin
+  //   - Retorna erro HTTP impedindo que o pro fique com o job não pago
+  const paymentStatus = record.getString('payment_status')
+  const intentId = record.getString('payment_intent_id')
+  const provider = $os.getenv('PAYMENT_PROVIDER') || ''
+
+  // Função auxiliar para registrar auditoria de pagamento
+  const logPaymentEvent = function (jId, pIntentId, evType, provStatus, payloadData) {
+    try {
+      const pCol = $app.findCollectionByNameOrId('payment_events')
+      const pRec = new Record(pCol)
+      if (jId) pRec.set('job_id', jId)
+      if (pIntentId) pRec.set('payment_intent_id', pIntentId)
+      pRec.set('type', evType)
+      if (provStatus) pRec.set('provider_status', provStatus)
+      if (payloadData) pRec.set('payload', payloadData)
+      $app.save(pRec)
+    } catch (peErr) {
+      console.log('[accept_job] erro ao salvar payment_event:', peErr)
+    }
+  }
+
+  // Função auxiliar para notificar admin de erro de captura
+  const notifyAdminCaptureFailure = function (jId, errDetails) {
+    try {
+      const notifCol = $app.findCollectionByNameOrId('notifications')
+      let adminUsers = []
+      try {
+        adminUsers = $app.findRecordsByFilter('users', "role = 'admin'", '-created', 10, 0)
+      } catch (_) {}
+      for (let ai = 0; ai < adminUsers.length; ai++) {
+        const adminId = adminUsers[ai].getString('id')
+        if (!adminId) continue
+        try {
+          const n = new Record(notifCol)
+          n.set('user_id', adminId)
+          n.set('type', 'system')
+          n.set('title', 'Falha na captura de pagamento')
+          n.set(
+            'message',
+            'Falha ao capturar pré-autorização do serviço #' +
+              jId.slice(0, 6) +
+              ': ' +
+              (errDetails || 'Erro na operadora') +
+              '. O serviço foi mantido em aberto para reoferta.',
+          )
+          n.set('job_id', jId)
+          n.set('read_status', false)
+          $app.save(n)
+        } catch (_) {}
+      }
+    } catch (_) {}
+  }
+
+  // Executa captura se o pagamento estiver 'authorized'
+  if (paymentStatus === 'authorized' && intentId) {
+    let captureOk = false
+    let captureErrorMsg = ''
+
+    if (provider === 'stripe') {
+      const secretKey = $os.getenv('STRIPE_SECRET_KEY') || ''
+      if (!secretKey) {
+        captureErrorMsg = 'Stripe não configurado no servidor.'
+      } else {
+        const amount = record.getFloat('price')
+        try {
+          const res = $http.send({
+            url:
+              'https://api.stripe.com/v1/payment_intents/' +
+              encodeURIComponent(intentId) +
+              '/capture',
+            method: 'POST',
+            headers: {
+              Authorization: 'Bearer ' + secretKey,
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: 'amount_to_capture=' + Math.round(amount * 100),
+            timeout: 20,
+          })
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            captureOk = true
+            logPaymentEvent(jobId, intentId, 'capture', 'succeeded', {
+              provider: 'stripe',
+              amount: amount,
+              source: 'accept_job',
+            })
+          } else {
+            const respJson = res.json || {}
+            captureErrorMsg =
+              (respJson.error && respJson.error.message) ||
+              'Falha na captura do Stripe (HTTP ' + res.statusCode + ')'
+            logPaymentEvent(jobId, intentId, 'error', 'stripe_capture_failed', {
+              provider: 'stripe',
+              statusCode: res.statusCode,
+              response: respJson,
+              source: 'accept_job',
+            })
+          }
+        } catch (sErr) {
+          captureErrorMsg = 'Exceção ao chamar captura Stripe: ' + String(sErr)
+          logPaymentEvent(jobId, intentId, 'error', 'stripe_exception', {
+            error: String(sErr),
+            source: 'accept_job',
+          })
+        }
+      }
+    } else if (provider === 'mercadopago') {
+      const accessToken = $os.getenv('MERCADOPAGO_ACCESS_TOKEN') || ''
+      if (!accessToken) {
+        captureErrorMsg = 'Mercado Pago não configurado no servidor.'
+      } else {
+        // 1. GET /v1/payments/{intentId} para checar status atual
+        let getRes = null
+        try {
+          getRes = $http.send({
+            url: 'https://api.mercadopago.com/v1/payments/' + encodeURIComponent(intentId),
+            method: 'GET',
+            headers: {
+              Authorization: 'Bearer ' + accessToken,
+            },
+            timeout: 20,
+          })
+        } catch (netErr) {
+          captureErrorMsg = 'Erro de conexão ao consultar Mercado Pago: ' + String(netErr)
+          logPaymentEvent(jobId, intentId, 'error', 'network_error', {
+            action: 'capture_check',
+            source: 'accept_job',
+            error: String(netErr),
+          })
+        }
+
+        if (getRes && getRes.statusCode >= 200 && getRes.statusCode < 300) {
+          const currentData = getRes.json || {}
+          const curStatus = currentData.status || ''
+
+          if (curStatus === 'approved') {
+            // Já capturado anteriormente
+            captureOk = true
+            logPaymentEvent(jobId, intentId, 'capture', 'approved', {
+              source: 'accept_job',
+              note: 'Pagamento já aprovado/capturado previamente no Mercado Pago.',
+            })
+          } else if (curStatus === 'authorized') {
+            // Fazer PUT capture:true
+            try {
+              const putRes = $http.send({
+                url: 'https://api.mercadopago.com/v1/payments/' + encodeURIComponent(intentId),
+                method: 'PUT',
+                headers: {
+                  Authorization: 'Bearer ' + accessToken,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ capture: true }),
+                timeout: 20,
+              })
+              if (putRes.statusCode >= 200 && putRes.statusCode < 300) {
+                captureOk = true
+                logPaymentEvent(jobId, intentId, 'capture', 'approved', {
+                  source: 'accept_job',
+                  action: 'captured_from_authorized',
+                })
+              } else {
+                captureErrorMsg =
+                  'Mercado Pago rejeitou a captura (HTTP ' + putRes.statusCode + ').'
+                logPaymentEvent(jobId, intentId, 'error', 'capture_failed', {
+                  source: 'accept_job',
+                  statusCode: putRes.statusCode,
+                  response: putRes.json,
+                })
+              }
+            } catch (pErr) {
+              captureErrorMsg = 'Erro ao enviar captura ao Mercado Pago: ' + String(pErr)
+              logPaymentEvent(jobId, intentId, 'error', 'capture_exception', {
+                source: 'accept_job',
+                error: String(pErr),
+              })
+            }
+          } else {
+            captureErrorMsg =
+              'Status da pré-autorização no Mercado Pago incompatível (' + curStatus + ').'
+            logPaymentEvent(jobId, intentId, 'error', curStatus, {
+              source: 'accept_job',
+              action: 'unexpected_status_on_capture',
+              response: currentData,
+            })
+          }
+        } else if (!captureErrorMsg) {
+          captureErrorMsg =
+            'Falha ao verificar status do pagamento no Mercado Pago (' +
+            (getRes ? getRes.statusCode : 0) +
+            ').'
+        }
+      }
+    } else {
+      // Demo mode
+      captureOk = true
+      logPaymentEvent(jobId, intentId, 'capture', 'approved', {
+        provider: 'demo',
+        amount: record.getFloat('price'),
+        source: 'accept_job',
+      })
+    }
+
+    if (!captureOk) {
+      // Falha na captura: cancelar reserva no gateway se ainda houver
+      if (provider === 'mercadopago') {
+        const accessToken = $os.getenv('MERCADOPAGO_ACCESS_TOKEN') || ''
+        if (accessToken) {
+          try {
+            $http.send({
+              url: 'https://api.mercadopago.com/v1/payments/' + encodeURIComponent(intentId),
+              method: 'PUT',
+              headers: {
+                Authorization: 'Bearer ' + accessToken,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ status: 'cancelled' }),
+              timeout: 15,
+            })
+          } catch (_) {}
+        }
+      } else if (provider === 'stripe') {
+        const secretKey = $os.getenv('STRIPE_SECRET_KEY') || ''
+        if (secretKey) {
+          try {
+            $http.send({
+              url:
+                'https://api.stripe.com/v1/payment_intents/' +
+                encodeURIComponent(intentId) +
+                '/cancel',
+              method: 'POST',
+              headers: {
+                Authorization: 'Bearer ' + secretKey,
+                'Content-Type': 'application/x-www-form-urlencoded',
+              },
+              timeout: 15,
+            })
+          } catch (_) {}
+        }
+      }
+
+      // Notificar administradores
+      notifyAdminCaptureFailure(jobId, captureErrorMsg)
+
+      // Reverter job para pending sem pro_id (permanece na lista de ofertas ou para o cliente atualizar cartão)
+      return e.json(402, {
+        code: 402,
+        message:
+          'Não foi possível capturar a pré-autorização de pagamento deste serviço (' +
+          captureErrorMsg +
+          '). O serviço retornou ao fluxo de ofertas.',
+        data: {
+          capture_failed: true,
+          error: captureErrorMsg,
+        },
+      })
+    }
+
+    // Captura ok! Atualizar payment_status para 'held'
+    record.set('payment_status', 'held')
+    record.set('payment_captured_at', new Date().toISOString())
+  }
+
   e.next()
 }, 'jobs')
