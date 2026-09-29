@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from 'recharts'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -21,7 +21,6 @@ import { Button } from '@/components/ui/button'
 import {
   Wallet,
   TrendingUp,
-  ArrowDownRight,
   Clock,
   CheckCircle2,
   XCircle,
@@ -31,6 +30,7 @@ import {
   Loader2,
 } from 'lucide-react'
 import { useAuth } from '@/hooks/use-auth'
+import pb from '@/lib/pocketbase/client'
 import {
   getProPaymentAccount,
   getProPayouts,
@@ -38,15 +38,19 @@ import {
   ProPaymentAccount,
 } from '@/services/payouts'
 
-const chartData = [
-  { day: 'Seg', amount: 120 },
-  { day: 'Ter', amount: 85 },
-  { day: 'Qua', amount: 190 },
-  { day: 'Qui', amount: 130 },
-  { day: 'Sex', amount: 250 },
-  { day: 'Sáb', amount: 310 },
-  { day: 'Dom', amount: 200 },
-]
+interface ProCompletedJob {
+  id: string
+  hours?: number
+  clocked_in_at?: string
+  started_at?: string
+  completed_at?: string
+}
+
+interface ChartDayBucket {
+  day: string
+  dateKey: string
+  amount: number
+}
 
 const chartConfig = {
   amount: {
@@ -55,10 +59,50 @@ const chartConfig = {
   },
 } satisfies ChartConfig
 
+const TIME_ZONE = 'America/Sao_Paulo'
+
+/** Formata uma data para YYYY-MM-DD no fuso de São Paulo */
+function getSaoPauloDateKey(date: Date): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date)
+
+  const y = parts.find((p) => p.type === 'year')?.value || '1970'
+  const m = parts.find((p) => p.type === 'month')?.value || '01'
+  const d = parts.find((p) => p.type === 'day')?.value || '01'
+  return `${y}-${m}-${d}`
+}
+
+/** Formata o rótulo do dia da semana capitalizado em pt-BR (ex: 'Seg', 'Ter') */
+function getSaoPauloDayLabel(date: Date): string {
+  const weekday = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: TIME_ZONE,
+    weekday: 'short',
+  }).format(date)
+  const clean = weekday.replace('.', '').trim()
+  return clean.charAt(0).toUpperCase() + clean.slice(1)
+}
+
+/** Formata duração em horas decimais para string ex: '32h 15m' ou '0h' */
+function formatHours(hoursDecimal: number): string {
+  if (!hoursDecimal || hoursDecimal <= 0) return '0h'
+  const totalMinutes = Math.round(hoursDecimal * 60)
+  const h = Math.floor(totalMinutes / 60)
+  const m = totalMinutes % 60
+  if (h === 0 && m === 0) return '0h'
+  if (m === 0) return `${h}h`
+  if (h === 0) return `${m}m`
+  return `${h}h ${m}m`
+}
+
 export default function Earnings() {
   const { user } = useAuth()
   const [account, setAccount] = useState<ProPaymentAccount | null>(null)
   const [payouts, setPayouts] = useState<PayoutRecord[]>([])
+  const [completedJobs, setCompletedJobs] = useState<ProCompletedJob[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -70,9 +114,21 @@ export default function Earnings() {
   const loadData = async (userId: string) => {
     try {
       setLoading(true)
-      const [acc, pList] = await Promise.all([getProPaymentAccount(userId), getProPayouts(userId)])
+      // Buscar payouts e jobs completados nos últimos 7 dias (rolante)
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+      const jobsFilter = `pro_id="${userId}" && status="completed" && completed_at >= "${sevenDaysAgo}"`
+
+      const [acc, pList, jList] = await Promise.all([
+        getProPaymentAccount(userId),
+        getProPayouts(userId),
+        pb.collection('jobs').getFullList<ProCompletedJob>({
+          filter: jobsFilter,
+          sort: '-completed_at',
+        }),
+      ])
       setAccount(acc)
       setPayouts(pList)
+      setCompletedJobs(jList)
     } catch (err) {
       console.error('Erro ao carregar dados de repasses:', err)
     } finally {
@@ -88,6 +144,97 @@ export default function Earnings() {
   const totalPaid = payouts
     .filter((p) => p.status === 'paid')
     .reduce((sum, p) => sum + (Number(p.amount_net) || 0), 0)
+
+  // Cálculos da semana atual e anterior (janela rolante de 7 dias)
+  const {
+    currentWeekRevenue,
+    previousWeekRevenue,
+    growthPercent,
+    currentWeekHours,
+    hourlyAverage,
+    weeklyChartData,
+  } = useMemo(() => {
+    const now = Date.now()
+    const ms7Days = 7 * 24 * 60 * 60 * 1000
+    const currentWeekStart = now - ms7Days
+    const previousWeekStart = now - 2 * ms7Days
+
+    let revCurrent = 0
+    let revPrevious = 0
+
+    // Mapeamento dos 7 dias para o gráfico (do mais antigo ao mais recente)
+    const dayBucketsMap = new Map<string, ChartDayBucket>()
+    const chartBuckets: ChartDayBucket[] = []
+
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(now - i * 24 * 60 * 60 * 1000)
+      const dateKey = getSaoPauloDateKey(d)
+      const dayLabel = getSaoPauloDayLabel(d)
+      const bucket: ChartDayBucket = { day: dayLabel, dateKey, amount: 0 }
+      dayBucketsMap.set(dateKey, bucket)
+      chartBuckets.push(bucket)
+    }
+
+    payouts.forEach((p) => {
+      if (!p.created) return
+      const createdTime = new Date(p.created).getTime()
+      if (isNaN(createdTime)) return
+      const amount = Number(p.amount_net) || 0
+
+      // Faturamento da semana (últimos 7 dias rolantes)
+      if (createdTime >= currentWeekStart && createdTime <= now) {
+        revCurrent += amount
+
+        // Bucket por dia para o gráfico
+        const pDateKey = getSaoPauloDateKey(new Date(p.created))
+        const bucket = dayBucketsMap.get(pDateKey)
+        if (bucket) {
+          bucket.amount = Math.round((bucket.amount + amount) * 100) / 100
+        }
+      } else if (createdTime >= previousWeekStart && createdTime < currentWeekStart) {
+        revPrevious += amount
+      }
+    })
+
+    // Percentual vs semana anterior
+    let growth: number | null = null
+    if (revPrevious > 0) {
+      growth = Math.round(((revCurrent - revPrevious) / revPrevious) * 100)
+    }
+
+    // Horas trabalhadas nos últimos 7 dias
+    let totalHours = 0
+    completedJobs.forEach((job) => {
+      if (!job.completed_at) return
+      const compTime = new Date(job.completed_at).getTime()
+      if (compTime < currentWeekStart || compTime > now) return
+
+      let jobH = Number(job.hours) || 0
+      if (jobH <= 0) {
+        const startStr = job.clocked_in_at || job.started_at
+        if (startStr && job.completed_at) {
+          const startMs = new Date(startStr).getTime()
+          const endMs = new Date(job.completed_at).getTime()
+          if (!isNaN(startMs) && !isNaN(endMs) && endMs > startMs) {
+            jobH = (endMs - startMs) / (1000 * 60 * 60)
+          }
+        }
+      }
+      totalHours += Math.max(0, jobH)
+    })
+
+    // Média por hora
+    const avg = totalHours > 0 ? revCurrent / totalHours : null
+
+    return {
+      currentWeekRevenue: revCurrent,
+      previousWeekRevenue: revPrevious,
+      growthPercent: growth,
+      currentWeekHours: totalHours,
+      hourlyAverage: avg,
+      weeklyChartData: chartBuckets,
+    }
+  }, [payouts, completedJobs])
 
   const formatCurrency = (val: number) =>
     Number(val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -185,10 +332,19 @@ export default function Earnings() {
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">R$ 1.285,00</div>
-            <p className="text-xs text-secondary mt-1 font-medium flex items-center">
-              <TrendingUp className="h-3 w-3 mr-1" /> +12% que a semana passada
-            </p>
+            <div className="text-2xl font-bold">
+              {loading ? '—' : formatCurrency(currentWeekRevenue)}
+            </div>
+            {!loading && growthPercent !== null && (
+              <p
+                className={`text-xs mt-1 font-medium flex items-center ${
+                  growthPercent >= 0 ? 'text-emerald-600' : 'text-amber-600'
+                }`}
+              >
+                <TrendingUp className="h-3 w-3 mr-1" />
+                {growthPercent >= 0 ? `+${growthPercent}%` : `${growthPercent}%`} vs semana anterior
+              </p>
+            )}
           </CardContent>
         </Card>
 
@@ -196,11 +352,17 @@ export default function Earnings() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium">Horas Trabalhadas</CardTitle>
-            <ArrowDownRight className="h-4 w-4 text-muted-foreground" />
+            <Clock className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">32h 15m</div>
-            <p className="text-xs text-muted-foreground mt-1">Média R$ 39,80/h</p>
+            <div className="text-2xl font-bold">
+              {loading ? '—' : formatHours(currentWeekHours)}
+            </div>
+            {!loading && hourlyAverage !== null && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Média {formatCurrency(hourlyAverage)}/h
+              </p>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -341,15 +503,39 @@ export default function Earnings() {
           <CardDescription>Seus ganhos por dia nos últimos 7 dias</CardDescription>
         </CardHeader>
         <CardContent>
-          <ChartContainer config={chartConfig} className="h-[300px] w-full">
-            <BarChart accessibilityLayer data={chartData}>
-              <CartesianGrid vertical={false} />
-              <XAxis dataKey="day" tickLine={false} tickMargin={10} axisLine={false} />
-              <YAxis tickFormatter={(val) => `R${val}`} tickLine={false} axisLine={false} />
-              <ChartTooltip cursor={false} content={<ChartTooltipContent hideLabel />} />
-              <Bar dataKey="amount" fill="var(--color-amount)" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ChartContainer>
+          {loading ? (
+            <div className="h-[300px] w-full flex items-center justify-center text-muted-foreground">
+              <Loader2 className="h-6 w-6 animate-spin mr-2" /> Carregando visão semanal...
+            </div>
+          ) : (
+            <ChartContainer config={chartConfig} className="h-[300px] w-full">
+              <BarChart accessibilityLayer data={weeklyChartData}>
+                <CartesianGrid vertical={false} />
+                <XAxis dataKey="day" tickLine={false} tickMargin={10} axisLine={false} />
+                <YAxis
+                  tickFormatter={(val) =>
+                    Number(val || 0).toLocaleString('pt-BR', {
+                      style: 'currency',
+                      currency: 'BRL',
+                      maximumFractionDigits: 0,
+                    })
+                  }
+                  tickLine={false}
+                  axisLine={false}
+                />
+                <ChartTooltip
+                  cursor={false}
+                  content={
+                    <ChartTooltipContent
+                      hideLabel
+                      formatter={(val) => [formatCurrency(Number(val) || 0), 'Ganhos']}
+                    />
+                  }
+                />
+                <Bar dataKey="amount" fill="var(--color-amount)" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ChartContainer>
+          )}
         </CardContent>
       </Card>
     </div>
