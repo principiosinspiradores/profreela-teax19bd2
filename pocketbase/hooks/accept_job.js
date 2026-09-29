@@ -183,7 +183,7 @@ onRecordUpdateRequest((e) => {
               jId.slice(0, 6) +
               ': ' +
               (errDetails || 'Erro na operadora') +
-              '. O serviço foi mantido em aberto para reoferta.',
+              '. A reserva foi cancelada e o cliente notificado para reautorizar.',
           )
           n.set('job_id', jId)
           n.set('read_status', false)
@@ -191,6 +191,30 @@ onRecordUpdateRequest((e) => {
         } catch (_) {}
       }
     } catch (_) {}
+  }
+
+  // Função auxiliar para notificar cliente para atualizar cartão / reautorizar
+  const notifyClientCaptureFailure = function (cId, jId, errDetails) {
+    if (!cId) return
+    try {
+      const notifCol = $app.findCollectionByNameOrId('notifications')
+      const n = new Record(notifCol)
+      n.set('user_id', cId)
+      n.set('type', 'system')
+      n.set('title', 'Pagamento não autorizado')
+      n.set(
+        'message',
+        'Não foi possível concluir a cobrança no cartão para o serviço #' +
+          jId.slice(0, 6) +
+          (errDetails ? ' (' + errDetails + ')' : '') +
+          '. A pré-autorização foi cancelada. Por favor, atualize sua forma de pagamento para que os profissionais possam aceitar seu pedido.',
+      )
+      n.set('job_id', jId)
+      n.set('read_status', false)
+      $app.save(n)
+    } catch (notifErr) {
+      console.log('[accept_job] erro ao notificar cliente sobre falha de captura:', notifErr)
+    }
   }
 
   // Executa captura se o pagamento estiver 'authorized'
@@ -344,11 +368,12 @@ onRecordUpdateRequest((e) => {
 
     if (!captureOk) {
       // Falha na captura: cancelar reserva no gateway se ainda houver
+      let cancelGatewayOk = false
       if (provider === 'mercadopago') {
         const accessToken = $os.getenv('MERCADOPAGO_ACCESS_TOKEN') || ''
         if (accessToken) {
           try {
-            $http.send({
+            const canRes = $http.send({
               url: 'https://api.mercadopago.com/v1/payments/' + encodeURIComponent(intentId),
               method: 'PUT',
               headers: {
@@ -358,13 +383,16 @@ onRecordUpdateRequest((e) => {
               body: JSON.stringify({ status: 'cancelled' }),
               timeout: 15,
             })
+            if (canRes.statusCode >= 200 && canRes.statusCode < 300) {
+              cancelGatewayOk = true
+            }
           } catch (_) {}
         }
       } else if (provider === 'stripe') {
         const secretKey = $os.getenv('STRIPE_SECRET_KEY') || ''
         if (secretKey) {
           try {
-            $http.send({
+            const canRes = $http.send({
               url:
                 'https://api.stripe.com/v1/payment_intents/' +
                 encodeURIComponent(intentId) +
@@ -376,20 +404,57 @@ onRecordUpdateRequest((e) => {
               },
               timeout: 15,
             })
+            if (canRes.statusCode >= 200 && canRes.statusCode < 300) {
+              cancelGatewayOk = true
+            }
           } catch (_) {}
         }
+      } else {
+        cancelGatewayOk = true
+      }
+
+      // CORREÇÃO 3:
+      // Se a reserva foi cancelada no gateway com sucesso (ou em demo):
+      // setar no banco o job payment_status='cancelled', limpar payment_intent_id e payment_authorized_at
+      // para que o job volte às ofertas em estado limpo — evitando loop 402 no próximo pro.
+      // Registrar payment_event do cancelamento.
+      if (cancelGatewayOk) {
+        try {
+          const freshJob = $app.findFirstRecordByData('jobs', 'id', jobId)
+          if (freshJob) {
+            freshJob.set('payment_status', 'cancelled')
+            freshJob.set('payment_intent_id', '')
+            freshJob.set('payment_authorized_at', '')
+            $app.save(freshJob)
+          }
+        } catch (jSaveErr) {
+          console.log(
+            '[accept_job] erro ao limpar status de pagamento do job ' + jobId + ':',
+            jSaveErr,
+          )
+        }
+
+        logPaymentEvent(jobId, intentId, 'refund', 'cancelled', {
+          source: 'accept_job',
+          action: 'cancel_reservation_after_capture_failure',
+          error: captureErrorMsg,
+        })
       }
 
       // Notificar administradores
       notifyAdminCaptureFailure(jobId, captureErrorMsg)
 
-      // Reverter job para pending sem pro_id (permanece na lista de ofertas ou para o cliente atualizar cartão)
+      // Notificar o cliente do job para atualizar o cartão/reautorizar
+      const customerId = record.getString('customer_id')
+      notifyClientCaptureFailure(customerId, jobId, captureErrorMsg)
+
+      // Retornar 402 impedindo o pro de ficar com o job sem pagamento
       return e.json(402, {
         code: 402,
         message:
           'Não foi possível capturar a pré-autorização de pagamento deste serviço (' +
           captureErrorMsg +
-          '). O serviço retornou ao fluxo de ofertas.',
+          '). A reserva foi cancelada e o cliente notificado para atualizar o pagamento.',
         data: {
           capture_failed: true,
           error: captureErrorMsg,

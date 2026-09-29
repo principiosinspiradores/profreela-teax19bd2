@@ -252,11 +252,67 @@ routerAdd(
       }
     }
 
+    // Helper inline para registrar auditoria de pagamento
+    const logPaymentEvent = function (jId, pIntentId, evType, provStatus, payloadData) {
+      try {
+        const pCol = $app.findCollectionByNameOrId('payment_events')
+        const pRec = new Record(pCol)
+        if (jId) pRec.set('job_id', jId)
+        if (pIntentId) pRec.set('payment_intent_id', pIntentId)
+        pRec.set('type', evType)
+        if (provStatus) pRec.set('provider_status', provStatus)
+        if (payloadData) pRec.set('payload', payloadData)
+        $app.save(pRec)
+      } catch (peErr) {
+        console.log('[cancel_job] erro ao salvar payment_event:', peErr)
+      }
+    }
+
+    // Helper inline para notificar administradores quando o refund falha
+    const notifyAdminRefundFailure = function (jId, pIntentId, errDetails, refundAmount) {
+      try {
+        const notifCol = $app.findCollectionByNameOrId('notifications')
+        let adminUsers = []
+        try {
+          adminUsers = $app.findRecordsByFilter('users', "role = 'admin'", '-created', 10, 0)
+        } catch (_) {}
+        for (let ai = 0; ai < adminUsers.length; ai++) {
+          const adminId = adminUsers[ai].getString('id')
+          if (!adminId) continue
+          try {
+            const n = new Record(notifCol)
+            n.set('user_id', adminId)
+            n.set('type', 'system')
+            n.set('title', 'Falha no reembolso de cancelamento')
+            n.set(
+              'message',
+              'Falha ao efetuar reembolso do serviço #' +
+                jId.slice(0, 6) +
+                ' (intent: ' +
+                (pIntentId || 'n/a') +
+                ', valor: R$ ' +
+                (refundAmount || 0).toFixed(2).replace('.', ',') +
+                '): ' +
+                (errDetails || 'Erro na operadora') +
+                '. O status do pagamento foi mantido como "held" para intervenção manual.',
+            )
+            n.set('job_id', jId)
+            n.set('read_status', false)
+            $app.save(n)
+          } catch (_) {}
+        }
+      } catch (_) {}
+    }
+
     // --- persist job cancellation / reopening ------------------------------
     //
     // Professional cancelling an ACCEPTED job reopens it instead of cancelling:
     // the job goes back to `pending`, the pro is detached, and eligible pros
     // (plus the client) are notified. The penalty is still computed & recorded.
+    // NOVO FLUXO: quando o pro cancela job aceito, o pagamento já está capturado (held).
+    // O valor continua em escrow ('held') com o mesmo payment_intent_id para o próximo
+    // profissional aceitar e ser pago após o serviço. NÃO marcar refunded!
+    //
     // Every other case (client cancel, pro cancel of a pending job) cancels.
     const isProReopen = cancelledByRole === 'pro' && jobStatus === 'accepted' && !isAdminOverride
 
@@ -291,12 +347,15 @@ routerAdd(
       job.set('cancelled_at', nowIso)
       if (reason) job.set('cancellation_reason', reason)
       job.set('penalty_amount', penaltyAmount)
-      // Release any pre-authorization the previous pro held, or refund a
-      // held (pay-at-request) payment back to the client.
-      if (paymentStatus === 'authorized' && penaltyStatus !== 'charged') {
+
+      // CORREÇÃO 1: Manter payment_status = 'held' e o mesmo payment_intent_id
+      // no job reaberto (espelhar cron_pro_delay). O dinheiro continua em escrow
+      // para o próximo profissional. NÃO marcar refunded.
+      // Se por acaso estivesse 'authorized' sem captura, cancela a pré-auth.
+      if (paymentStatus === 'held') {
+        job.set('payment_status', 'held')
+      } else if (paymentStatus === 'authorized' && penaltyStatus !== 'charged') {
         job.set('payment_status', 'cancelled')
-      } else if (paymentStatus === 'held') {
-        job.set('payment_status', 'refunded')
       }
       reopened = true
     } else {
@@ -305,14 +364,212 @@ routerAdd(
       job.set('cancelled_at', nowIso)
       if (reason) job.set('cancellation_reason', reason)
       job.set('penalty_amount', penaltyAmount)
-      // release / cancel any pending pre-authorization that was not captured
-      if (paymentStatus === 'authorized' && penaltyStatus !== 'charged') {
-        job.set('payment_status', 'cancelled')
+
+      // CORREÇÃO 2: Cliente cancela ou admin cancela job definitivo
+      // Caso 1: paymentStatus === 'authorized' (reserva ainda não capturada)
+      if (paymentStatus === 'authorized') {
+        if (penaltyStatus !== 'charged') {
+          // Cancelar a reserva no gateway (Stripe ou Mercado Pago)
+          if (intentId) {
+            if (provider === 'mercadopago') {
+              const accessToken = $os.getenv('MERCADOPAGO_ACCESS_TOKEN') || ''
+              if (accessToken) {
+                try {
+                  $http.send({
+                    url: 'https://api.mercadopago.com/v1/payments/' + encodeURIComponent(intentId),
+                    method: 'PUT',
+                    headers: {
+                      Authorization: 'Bearer ' + accessToken,
+                      'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ status: 'cancelled' }),
+                    timeout: 20,
+                  })
+                } catch (_) {}
+              }
+            } else if (provider === 'stripe') {
+              const secretKey = $os.getenv('STRIPE_SECRET_KEY') || ''
+              if (secretKey) {
+                try {
+                  $http.send({
+                    url:
+                      'https://api.stripe.com/v1/payment_intents/' +
+                      encodeURIComponent(intentId) +
+                      '/cancel',
+                    method: 'POST',
+                    headers: {
+                      Authorization: 'Bearer ' + secretKey,
+                      'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    timeout: 20,
+                  })
+                } catch (_) {}
+              }
+            }
+          }
+          job.set('payment_status', 'cancelled')
+          logPaymentEvent(jobId, intentId, 'refund', 'cancelled', {
+            source: 'cancel_job',
+            action: 'cancel_pre_auth',
+            cancelledBy: cancelledByRole,
+          })
+        }
       }
-      // Cliente cancelando com pagamento já capturado (held):
-      // marca refunded; se há multa ela já está em penalty_amount
+
+      // Caso 2: paymentStatus === 'held' (pagamento já capturado na aceitação do pro)
       if (paymentStatus === 'held') {
-        job.set('payment_status', 'refunded')
+        // Calcular valor a reembolsar ao cliente:
+        // Se há multa (penaltyAmount > 0): reembolsar (price - penaltyAmount). A plataforma retém a multa.
+        // Se multa zero (carência): reembolsar total (price).
+        const rawRefundAmount = penaltyAmount > 0 ? price - penaltyAmount : price
+        const refundAmount = Math.max(0, Math.round(rawRefundAmount * 100) / 100)
+
+        let refundSuccess = false
+        let refundErrorMsg = ''
+
+        if (refundAmount <= 0) {
+          // Multa igual ou maior ao valor total do job: 100% retido, nenhum reembolso via gateway
+          refundSuccess = true
+          logPaymentEvent(jobId, intentId, 'refund', 'retained', {
+            source: 'cancel_job',
+            note: 'Multa integral retida: nenhum estorno enviado ao gateway.',
+            penaltyAmount: penaltyAmount,
+            jobPrice: price,
+          })
+        } else if (!intentId || provider === '') {
+          // Modo Demo: simular reembolso bem-sucedido
+          refundSuccess = true
+          logPaymentEvent(jobId, intentId, 'refund', 'refunded', {
+            source: 'cancel_job',
+            provider: 'demo',
+            refundAmount: refundAmount,
+            penaltyAmount: penaltyAmount,
+            jobPrice: price,
+          })
+        } else if (provider === 'mercadopago') {
+          const accessToken = $os.getenv('MERCADOPAGO_ACCESS_TOKEN') || ''
+          if (!accessToken) {
+            refundErrorMsg = 'MERCADOPAGO_ACCESS_TOKEN não configurado no servidor.'
+          } else {
+            try {
+              // MP: POST /v1/payments/{id}/refunds
+              // Se partial (penaltyAmount > 0 e refundAmount < price), envia { amount: refundAmount }.
+              // Se refund total (penaltyAmount === 0), pode enviar vazio ou com amount; enviar { amount } garante o valor exato.
+              const refundBody = { amount: refundAmount }
+              const refRes = $http.send({
+                url:
+                  'https://api.mercadopago.com/v1/payments/' +
+                  encodeURIComponent(intentId) +
+                  '/refunds',
+                method: 'POST',
+                headers: {
+                  Authorization: 'Bearer ' + accessToken,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(refundBody),
+                timeout: 25,
+              })
+
+              if (refRes.statusCode >= 200 && refRes.statusCode < 300) {
+                refundSuccess = true
+                logPaymentEvent(jobId, intentId, 'refund', 'refunded', {
+                  source: 'cancel_job',
+                  provider: 'mercadopago',
+                  refundAmount: refundAmount,
+                  penaltyAmount: penaltyAmount,
+                  response: refRes.json,
+                })
+              } else {
+                const respJson = refRes.json || {}
+                refundErrorMsg =
+                  respJson.message ||
+                  respJson.error ||
+                  'Mercado Pago rejeitou o reembolso (HTTP ' + refRes.statusCode + ').'
+                logPaymentEvent(jobId, intentId, 'error', 'refund_failed', {
+                  source: 'cancel_job',
+                  provider: 'mercadopago',
+                  statusCode: refRes.statusCode,
+                  response: respJson,
+                  refundAmount: refundAmount,
+                })
+              }
+            } catch (mpErr) {
+              refundErrorMsg = 'Exceção ao chamar reembolso no Mercado Pago: ' + String(mpErr)
+              logPaymentEvent(jobId, intentId, 'error', 'refund_exception', {
+                source: 'cancel_job',
+                error: String(mpErr),
+                refundAmount: refundAmount,
+              })
+            }
+          }
+        } else if (provider === 'stripe') {
+          const secretKey = $os.getenv('STRIPE_SECRET_KEY') || ''
+          if (!secretKey) {
+            refundErrorMsg = 'STRIPE_SECRET_KEY não configurado no servidor.'
+          } else {
+            try {
+              // Stripe: POST /v1/refunds com payment_intent e amount em centavos
+              const stripeBody =
+                'payment_intent=' +
+                encodeURIComponent(intentId) +
+                '&amount=' +
+                Math.round(refundAmount * 100)
+              const refRes = $http.send({
+                url: 'https://api.stripe.com/v1/refunds',
+                method: 'POST',
+                headers: {
+                  Authorization: 'Bearer ' + secretKey,
+                  'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: stripeBody,
+                timeout: 25,
+              })
+
+              if (refRes.statusCode >= 200 && refRes.statusCode < 300) {
+                refundSuccess = true
+                logPaymentEvent(jobId, intentId, 'refund', 'refunded', {
+                  source: 'cancel_job',
+                  provider: 'stripe',
+                  refundAmount: refundAmount,
+                  penaltyAmount: penaltyAmount,
+                  response: refRes.json,
+                })
+              } else {
+                const respJson = refRes.json || {}
+                refundErrorMsg =
+                  (respJson.error && respJson.error.message) ||
+                  'Stripe rejeitou o reembolso (HTTP ' + refRes.statusCode + ').'
+                logPaymentEvent(jobId, intentId, 'error', 'stripe_refund_failed', {
+                  source: 'cancel_job',
+                  provider: 'stripe',
+                  statusCode: refRes.statusCode,
+                  response: respJson,
+                  refundAmount: refundAmount,
+                })
+              }
+            } catch (sErr) {
+              refundErrorMsg = 'Exceção ao chamar reembolso Stripe: ' + String(sErr)
+              logPaymentEvent(jobId, intentId, 'error', 'stripe_refund_exception', {
+                source: 'cancel_job',
+                error: String(sErr),
+                refundAmount: refundAmount,
+              })
+            }
+          }
+        }
+
+        if (refundSuccess) {
+          job.set('payment_status', 'refunded')
+          if (penaltyAmount > 0) {
+            // A multa foi retida diretamente do valor já capturado
+            penaltyStatus = 'charged'
+          }
+        } else {
+          // Se o refund falhar, manter 'held' e notificar admin (não mentir no status)
+          job.set('payment_status', 'held')
+          notifyAdminRefundFailure(jobId, intentId, refundErrorMsg, refundAmount)
+          console.log('[cancel_job] falha ao reembolsar job ' + jobId + ':', refundErrorMsg)
+        }
       }
     }
     $app.save(job)
