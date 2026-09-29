@@ -37,6 +37,7 @@ import {
   PayoutRecord,
   ProPaymentAccount,
 } from '@/services/payouts'
+import { getSettings, type PlatformSettings } from '@/services/settings'
 
 interface ProCompletedJob {
   id: string
@@ -104,6 +105,7 @@ export default function Earnings() {
   const [payouts, setPayouts] = useState<PayoutRecord[]>([])
   const [completedJobs, setCompletedJobs] = useState<ProCompletedJob[]>([])
   const [loading, setLoading] = useState(true)
+  const [settings, setSettings] = useState<PlatformSettings | null>(null)
 
   useEffect(() => {
     if (user?.id) {
@@ -118,17 +120,19 @@ export default function Earnings() {
       const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
       const jobsFilter = `pro_id="${userId}" && status="completed" && completed_at >= "${sevenDaysAgo}"`
 
-      const [acc, pList, jList] = await Promise.all([
+      const [acc, pList, jList, fetchedSettings] = await Promise.all([
         getProPaymentAccount(userId),
         getProPayouts(userId),
         pb.collection('jobs').getFullList<ProCompletedJob>({
           filter: jobsFilter,
           sort: '-completed_at',
         }),
+        getSettings().catch(() => null),
       ])
       setAccount(acc)
       setPayouts(pList)
       setCompletedJobs(jList)
+      if (fetchedSettings) setSettings(fetchedSettings)
     } catch (err) {
       console.error('Erro ao carregar dados de repasses:', err)
     } finally {
@@ -395,8 +399,11 @@ export default function Earnings() {
               <Wallet className="h-10 w-10 mx-auto opacity-30" />
               <p className="font-medium">Nenhum repasse registrado ainda</p>
               <p className="text-xs max-w-md mx-auto">
-                Quando você concluir serviços e a garantia de 24h expirar, os valores aparecerão
-                aqui como pendentes de repasse Pix.
+                Quando você concluir serviços e a garantia de{' '}
+                {(settings?.guarantee_period_days ?? 1) === 1
+                  ? '24h'
+                  : `${settings?.guarantee_period_days ?? 1} dias`}{' '}
+                expirar, os valores aparecerão aqui como pendentes de repasse Pix.
               </p>
             </div>
           ) : (

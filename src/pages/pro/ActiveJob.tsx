@@ -46,6 +46,7 @@ import {
   hasJobPhoto,
 } from '@/services/jobPhotos'
 import { PhotoCapture } from '@/components/PhotoCapture'
+import { getSettings, type PlatformSettings } from '@/services/settings'
 
 type Step = 'transit' | 'arrived' | 'start_photo' | 'working' | 'end_photo' | 'finished'
 
@@ -107,6 +108,13 @@ export default function ActiveJob() {
   const [startPhotoReady, setStartPhotoReady] = useState(false)
   const [endPhotoReady, setEndPhotoReady] = useState(false)
   const [photoDialog, setPhotoDialog] = useState<null | 'start' | 'end'>(null)
+  const [settings, setSettings] = useState<PlatformSettings | null>(null)
+
+  useEffect(() => {
+    getSettings()
+      .then(setSettings)
+      .catch(() => {})
+  }, [])
 
   // GPS tracking — active during transit, arrival and the working/finish steps
   // so the geofence gate can be evaluated live.
@@ -501,11 +509,13 @@ export default function ActiveJob() {
       if (jobId) {
         localStorage.removeItem('activeJobStep_' + jobId)
       }
+      const guaranteeDays = settings?.guarantee_period_days ?? 1
+      const guaranteeText = guaranteeDays === 1 ? '24h' : `${guaranteeDays} dias`
       toast({
         title: 'Serviço finalizado',
         description: isPastLateDeadline
-          ? 'Serviço finalizado fora do prazo. O período de garantia de 24h foi iniciado.'
-          : 'Iniciado o período de garantia de 24h. O pagamento será liberado após.',
+          ? `Serviço finalizado fora do prazo. O período de garantia de ${guaranteeText} foi iniciado.`
+          : `Iniciado o período de garantia de ${guaranteeText}. O pagamento será liberado após.`,
       })
       navigate('/pro')
     } catch (err: any) {

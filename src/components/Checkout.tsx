@@ -95,11 +95,12 @@ export function Checkout({
 
   const processPaymentSuccess = (result: any) => {
     if (result?.ok || result?.id || result?.split) {
+      const guaranteeText = guaranteeDays === 1 ? '24h' : `${guaranteeDays} dias`
       toast({
         title: 'Pagamento confirmado',
         description: result?.demo
-          ? 'Pagamento simulado (modo demo). O valor fica em garantia e é liberado ao profissional 24h após a conclusão.'
-          : 'Valor pago e mantido em garantia pela plataforma. Será liberado ao profissional 24h após a conclusão do serviço.',
+          ? `Pagamento simulado (modo demo). O valor fica em garantia e é liberado ao profissional ${guaranteeText} após a conclusão.`
+          : `Valor pago e mantido em garantia pela plataforma. Será liberado ao profissional ${guaranteeText} após a conclusão do serviço.`,
       })
       onPaid?.(result)
     } else {

@@ -87,6 +87,7 @@ import { getAvatarUrl } from '@/lib/avatar'
 import { useToast } from '@/hooks/use-toast'
 import { useRealtime } from '@/hooks/use-realtime'
 import { useAuth } from '@/hooks/use-auth'
+import { getSettings, type PlatformSettings } from '@/services/settings'
 
 export default function AdminDashboard() {
   const [logs, setLogs] = useState<any[]>([])
@@ -127,6 +128,7 @@ export default function AdminDashboard() {
   const [accounts, setAccounts] = useState<ProPaymentAccount[]>([])
   const [payouts, setPayouts] = useState<PayoutRecord[]>([])
   const [loadingAccounts, setLoadingAccounts] = useState(false)
+  const [settings, setSettings] = useState<PlatformSettings | null>(null)
   const [loadingPayouts, setLoadingPayouts] = useState(false)
   const [accountsFilter, setAccountsFilter] = useState<string>('all')
   const [payoutsFilter, setPayoutsFilter] = useState<string>('pending')
@@ -408,6 +410,9 @@ export default function AdminDashboard() {
     loadModerationPro()
     loadAccounts()
     loadPayouts()
+    getSettings()
+      .then(setSettings)
+      .catch(() => {})
   }, [])
 
   useRealtime('documents', loadDocs)
@@ -1888,7 +1893,11 @@ export default function AdminDashboard() {
                     Nenhum repasse encontrado neste filtro
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Os repasses são criados automaticamente após a liberação da garantia de 24h.
+                    Os repasses são criados automaticamente após a liberação da garantia de{' '}
+                    {(settings?.guarantee_period_days ?? 1) === 1
+                      ? '24h'
+                      : `${settings?.guarantee_period_days ?? 1} dias`}
+                    .
                   </p>
                 </div>
               ) : (

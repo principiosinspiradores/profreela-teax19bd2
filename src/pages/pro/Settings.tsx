@@ -41,6 +41,7 @@ import {
   DocType,
   PixKeyType,
 } from '@/services/payouts'
+import { getSettings, type PlatformSettings } from '@/services/settings'
 
 export default function ProSettings() {
   const { user, role } = useAuth()
@@ -55,6 +56,7 @@ export default function ProSettings() {
   const [loadingAccount, setLoadingAccount] = useState(true)
   const [savingAccount, setSavingAccount] = useState(false)
   const [account, setAccount] = useState<ProPaymentAccount | null>(null)
+  const [settings, setSettings] = useState<PlatformSettings | null>(null)
 
   const [holderName, setHolderName] = useState('')
   const [docType, setDocType] = useState<DocType>('cpf')
@@ -68,6 +70,12 @@ export default function ProSettings() {
   // Validation errors
   const [docError, setDocError] = useState<string | null>(null)
   const [pixError, setPixError] = useState<string | null>(null)
+
+  useEffect(() => {
+    getSettings()
+      .then(setSettings)
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (user) {
@@ -250,6 +258,8 @@ export default function ProSettings() {
 
   const avg = Number(user?.rating_avg || 0)
   const count = Number(user?.rating_count || 0)
+  const guaranteeDays = settings?.guarantee_period_days ?? 1
+  const guaranteeText = guaranteeDays === 1 ? '24h' : `${guaranteeDays} dias`
 
   return (
     <div className="space-y-8 max-w-3xl mx-auto w-full">
@@ -369,7 +379,7 @@ export default function ProSettings() {
                 <p className="font-medium">Repasses automáticos via Pix</p>
                 <p className="text-blue-800 text-xs sm:text-sm">
                   O repasse dos seus serviços é enviado para esta conta via Pix após a janela de
-                  garantia de 24h.
+                  garantia de {guaranteeText}.
                 </p>
               </div>
             </div>
