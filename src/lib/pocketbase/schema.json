@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-21T16:59:38.004Z",
+  "generatedAt": "2026-11-21T18:04:23.260Z",
   "collections": [
     {
       "name": "users",
@@ -181,8 +181,8 @@
       "name": "jobs",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != ''",
-        "view": "@request.auth.id != ''",
+        "list": "@request.auth.id != '' && (@request.auth.role = 'admin' || customer_id = @request.auth.id || pro_id = @request.auth.id || (status = 'pending' && pro_id = ''))",
+        "view": "@request.auth.id != '' && (@request.auth.role = 'admin' || customer_id = @request.auth.id || pro_id = @request.auth.id || (status = 'pending' && pro_id = ''))",
         "create": "@request.auth.id != ''",
         "update": "@request.auth.id != ''",
         "delete": "@request.auth.role = 'admin'"
