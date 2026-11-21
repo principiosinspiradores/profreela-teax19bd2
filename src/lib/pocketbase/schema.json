@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-21T18:04:23.260Z",
+  "generatedAt": "2026-11-21T18:38:16.292Z",
   "collections": [
     {
       "name": "users",
@@ -903,8 +903,8 @@
       "name": "settings",
       "type": "base",
       "apiRules": {
-        "list": "",
-        "view": "",
+        "list": "@request.auth.role = 'admin'",
+        "view": "@request.auth.role = 'admin'",
         "create": "@request.auth.role = 'admin'",
         "update": "@request.auth.role = 'admin'",
         "delete": "@request.auth.role = 'admin'"
@@ -1171,7 +1171,7 @@
       "apiRules": {
         "list": "@request.auth.id != ''",
         "view": "@request.auth.id != ''",
-        "create": "@request.auth.id != ''",
+        "create": "@request.auth.id != '' && @request.auth.role = 'admin'",
         "update": "@request.auth.id != '' && @request.auth.role = 'admin'",
         "delete": "@request.auth.id != '' && @request.auth.role = 'admin'"
       },
@@ -1305,8 +1305,8 @@
       "name": "job_photos",
       "type": "base",
       "apiRules": {
-        "list": "@request.auth.id != ''",
-        "view": "@request.auth.id != ''",
+        "list": "@request.auth.id != '' && (job_id.customer_id = @request.auth.id || job_id.pro_id = @request.auth.id || @request.auth.role = 'admin')",
+        "view": "@request.auth.id != '' && (job_id.customer_id = @request.auth.id || job_id.pro_id = @request.auth.id || @request.auth.role = 'admin')",
         "create": "@request.auth.id != ''",
         "update": "@request.auth.role = 'admin'",
         "delete": "@request.auth.role = 'admin'"
@@ -1686,8 +1686,8 @@
       "name": "payment_events",
       "type": "base",
       "apiRules": {
-        "list": null,
-        "view": null,
+        "list": "@request.auth.role = 'admin'",
+        "view": "@request.auth.role = 'admin'",
         "create": null,
         "update": null,
         "delete": null
