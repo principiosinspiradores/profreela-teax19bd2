@@ -23,24 +23,6 @@
 //
 // Hook type: onRecordUpdateRequest on `jobs`.
 
-const MONEY_FIELDS = [
-  'payment_status',
-  'payment_intent_id',
-  'payment_authorized_at',
-  'payment_hold_until',
-  'payment_released_at',
-  'payment_disputed_at',
-  'dispute_reason',
-  'payment_method',
-  'payment_installments',
-  'penalty_amount',
-  'penalty_applied',
-  'penalty_forgiven',
-  'price',
-  'client_price',
-  'emergency_fee',
-]
-
 onRecordUpdateRequest((e) => {
   const auth = e.requestInfo().auth
 
@@ -62,8 +44,27 @@ onRecordUpdateRequest((e) => {
     return
   }
 
+  const MONEY_FIELDS = [
+    'payment_status',
+    'payment_intent_id',
+    'payment_authorized_at',
+    'payment_hold_until',
+    'payment_released_at',
+    'payment_disputed_at',
+    'dispute_reason',
+    'payment_method',
+    'payment_installments',
+    'penalty_amount',
+    'penalty_applied',
+    'penalty_forgiven',
+    'price',
+    'client_price',
+    'emergency_fee',
+  ]
+
   // Restaura campos de dinheiro alterados por não-admin.
-  for (const field of MONEY_FIELDS) {
+  for (let i = 0; i < MONEY_FIELDS.length; i++) {
+    const field = MONEY_FIELDS[i]
     const before = original.get(field)
     const after = e.record.get(field)
     let changed = false
@@ -74,7 +75,7 @@ onRecordUpdateRequest((e) => {
     }
     if (changed) {
       e.record.set(field, before)
-      console.log('[jobs_payment_guard] campo de pagamento restaurado:', field)
+      console.log('[jobs_payment_guard] campo de pagamento restaurado: ' + field)
     }
   }
 
